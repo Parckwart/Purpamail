@@ -624,6 +624,7 @@ impl PurpamailApp {
             if let Some(setup) = &mut self.account_setup {
                 setup.on_event(&ev);
             }
+            self.prefs.on_event(&ev);
             match ev {
                 Event::Activity(a) => {
                     let now = ctx.input(|i| i.time);
