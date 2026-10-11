@@ -208,7 +208,7 @@ fn real_name(user: &str) -> Option<String> {
     let passwd = std::fs::read_to_string("/etc/passwd").ok()?;
     passwd.lines().find_map(|l| {
         let parts: Vec<&str> = l.split(':').collect();
-        (parts.first() == Some(&user)).then(|| parts.get(4).map(|g| g.split(',').next().unwrap_or("").trim().to_string())).flatten().filter(|n| !n.is_empty())
+        (parts.first() == Some(&user)).then(|| parts.get(4).map(|g| g.split(',').next().unwrap_or("").trim().to_string())).flatten().filter(|n| !n.is_empty() && !n.eq_ignore_ascii_case(user))
     })
 }
 
