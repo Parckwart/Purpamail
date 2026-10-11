@@ -83,7 +83,8 @@ fn salutation(line: &str) -> Option<Salutation> {
     let lower = l.to_lowercase();
     let words = l.split_whitespace().count();
     const GREETINGS: [&str; 12] = ["hi", "hello", "hey", "dear", "good", "morning", "hallo", "liebe", "lieber", "sehr", "moin", "servus"];
-    const CLOSINGS: [&str; 14] = ["thanks", "thank", "best", "cheers", "regards", "kind", "warm", "sincerely", "yours", "viele", "beste", "danke", "liebe", "herzliche"];
+    const CLOSINGS: [&str; 14] =
+        ["thanks", "thank", "best", "cheers", "regards", "kind", "warm", "sincerely", "yours", "viele", "beste", "danke", "liebe", "herzliche"];
     let first = lower.split(|c: char| !c.is_alphanumeric()).next().unwrap_or("");
     if words <= 4 && (l.ends_with(',') || l.ends_with('!')) {
         if GREETINGS.contains(&first) && !(first == "liebe" && lower.contains("grüße")) {
@@ -96,7 +97,20 @@ fn salutation(line: &str) -> Option<Salutation> {
     }
     matches!(
         lower.as_str(),
-        "thanks" | "thanks!" | "cheers" | "best" | "regards" | "vg" | "lg" | "mfg" | "gruß" | "grüße" | "viele grüße" | "liebe grüße" | "best regards" | "kind regards"
+        "thanks"
+            | "thanks!"
+            | "cheers"
+            | "best"
+            | "regards"
+            | "vg"
+            | "lg"
+            | "mfg"
+            | "gruß"
+            | "grüße"
+            | "viele grüße"
+            | "liebe grüße"
+            | "best regards"
+            | "kind regards"
     )
     .then_some(Salutation::Closing)
 }
@@ -231,7 +245,8 @@ fn next_is_lowercase_or_month(chars: &[(usize, char)], j: usize) -> bool {
         return false;
     }
     let word: String = chars[k..].iter().map(|(_, c)| *c).take_while(|c| c.is_alphabetic()).collect::<String>().to_lowercase();
-    const MONTHS: [&str; 16] = ["januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "dezember", "jan", "feb", "okt", "dez"];
+    const MONTHS: [&str; 16] =
+        ["januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "dezember", "jan", "feb", "okt", "dez"];
     chars[k].1.is_lowercase() || MONTHS.contains(&word.as_str())
 }
 
@@ -400,7 +415,8 @@ mod tests {
     fn thread_summary_covers_conversation() {
         let texts = vec![
             "Can we move the website launch to next Friday? The design team needs more time for the new landing page.".to_string(),
-            "Friday works for me. I will tell the hosting provider about the new launch date.\n\nOn Tue, Bob wrote:\n> Can we move the website launch".to_string(),
+            "Friday works for me. I will tell the hosting provider about the new launch date.\n\nOn Tue, Bob wrote:\n> Can we move the website launch"
+                .to_string(),
             "Great, the launch is confirmed for Friday. The landing page will be ready on Wednesday for a final review.".to_string(),
         ];
         let s = summarize_thread(&texts, 2);

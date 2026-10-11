@@ -24,7 +24,8 @@ fn is_separator(line: &[u8]) -> bool {
     let Some(_sender) = parts.next() else { return false };
     // Something date-like must follow: a 4 digit year or a time.
     let tail: Vec<&str> = parts.collect();
-    !tail.is_empty() && tail.iter().any(|p| (p.len() == 4 && p.chars().all(|c| c.is_ascii_digit())) || p.matches(':').count() >= 1 && p.chars().any(|c| c.is_ascii_digit()))
+    !tail.is_empty()
+        && tail.iter().any(|p| (p.len() == 4 && p.chars().all(|c| c.is_ascii_digit())) || p.matches(':').count() >= 1 && p.chars().any(|c| c.is_ascii_digit()))
 }
 
 /// Split a byte buffer into lines, keeping the line terminators.
@@ -227,15 +228,15 @@ fn walk(dir: &Path, prefix: &str, root_name: &str, out: &mut Vec<(String, Vec<Ve
                 out.push((own_name.clone(), parse_mbox(&data)));
             }
         } else if is_eml(&e) {
-            if let Ok(d) = fs::read(&e) {
-                if !d.is_empty() {
-                    emls.push(d);
-                }
+            if let Ok(d) = fs::read(&e)
+                && !d.is_empty()
+            {
+                emls.push(d);
             }
-        } else if looks_like_mbox_file(&e) {
-            if let Ok(data) = fs::read(&e) {
-                out.push((join_name(prefix, &mailbox_name_of(&e)), parse_mbox(&data)));
-            }
+        } else if looks_like_mbox_file(&e)
+            && let Ok(data) = fs::read(&e)
+        {
+            out.push((join_name(prefix, &mailbox_name_of(&e)), parse_mbox(&data)));
         }
     }
     if !emls.is_empty() {
@@ -248,7 +249,12 @@ fn envelope(raw: &[u8]) -> (String, String) {
     let parsed = super::mime::parse(raw);
     let sender = parsed
         .as_ref()
-        .and_then(|p| p.header("Return-Path").map(|r| r.trim().trim_matches(['<', '>']).to_string()).filter(|s| !s.is_empty() && !s.contains(' ')).or_else(|| Some(p.from.email.clone())))
+        .and_then(|p| {
+            p.header("Return-Path")
+                .map(|r| r.trim().trim_matches(['<', '>']).to_string())
+                .filter(|s| !s.is_empty() && !s.contains(' '))
+                .or_else(|| Some(p.from.email.clone()))
+        })
         .filter(|s| !s.is_empty() && !s.contains(char::is_whitespace))
         .unwrap_or_else(|| "MAILER-DAEMON".to_string());
     let ts = parsed.map(|p| p.date).filter(|d| *d != 0).unwrap_or_else(super::model::now_ts);
@@ -282,10 +288,10 @@ pub fn to_mboxrd(messages: &[Vec<u8>]) -> Vec<u8> {
 
 /// Write messages to an mbox file.
 pub fn export(path: &Path, messages: &[Vec<u8>]) -> anyhow::Result<()> {
-    if let Some(dir) = path.parent() {
-        if !dir.as_os_str().is_empty() {
-            fs::create_dir_all(dir).ok();
-        }
+    if let Some(dir) = path.parent()
+        && !dir.as_os_str().is_empty()
+    {
+        fs::create_dir_all(dir).ok();
     }
     let mut f = fs::File::create(path).with_context(|| format!("creating {}", path.display()))?;
     f.write_all(&to_mboxrd(messages))?;
@@ -303,7 +309,8 @@ mod tests {
         d
     }
 
-    const M1: &[u8] = b"From: Anna <anna@example.com>\nTo: me@example.org\nSubject: One\nDate: Mon, 6 Oct 2025 10:00:00 +0000\n\nHello\nFrom the body\n>From quoted\n";
+    const M1: &[u8] =
+        b"From: Anna <anna@example.com>\nTo: me@example.org\nSubject: One\nDate: Mon, 6 Oct 2025 10:00:00 +0000\n\nHello\nFrom the body\n>From quoted\n";
     const M2: &[u8] = b"From: Bob <bob@example.com>\r\nSubject: Two\r\n\r\nSecond\r\n";
 
     #[test]
@@ -321,7 +328,8 @@ mod tests {
 
     #[test]
     fn mboxo_without_blank_line_escape() {
-        let data = b"From MAILER-DAEMON Thu Jan  1 00:00:00 2025\nSubject: a\n\nFrom here on, text.\n\nFrom someone Fri Jan  2 00:00:00 2025\nSubject: b\n\nbody\n";
+        let data =
+            b"From MAILER-DAEMON Thu Jan  1 00:00:00 2025\nSubject: a\n\nFrom here on, text.\n\nFrom someone Fri Jan  2 00:00:00 2025\nSubject: b\n\nbody\n";
         let msgs = parse_mbox(data);
         assert_eq!(msgs.len(), 2);
         // "From here on" has no date, so it is body text, not a separator.
@@ -375,10 +383,7 @@ mod tests {
         fs::write(root.join("Loose/x.eml"), M2).unwrap();
         let tree = import_mailbox_tree(&root);
         let names: Vec<(&str, usize)> = tree.iter().map(|(n, m)| (n.as_str(), m.len())).collect();
-        assert_eq!(
-            names,
-            vec![("Loose", 1), ("Old/Maildir", 1), ("Old/Maildir/Sub/Deep", 1), ("Projects", 1), ("Projects/Website", 2), ("Receipts", 1)]
-        );
+        assert_eq!(names, vec![("Loose", 1), ("Old/Maildir", 1), ("Old/Maildir/Sub/Deep", 1), ("Projects", 1), ("Projects/Website", 2), ("Receipts", 1)]);
         // A single mbox file as root
         let single = import_mailbox_tree(&root.join("Receipts"));
         assert_eq!(single, vec![("Receipts".to_string(), vec![M2.to_vec()])]);

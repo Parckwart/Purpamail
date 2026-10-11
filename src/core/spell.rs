@@ -230,10 +230,8 @@ impl AffixFile {
 }
 
 fn decode(bytes: &[u8], latin1: bool) -> String {
-    if !latin1 {
-        if let Ok(s) = std::str::from_utf8(bytes) {
-            return s.to_string();
-        }
+    if !latin1 && let Ok(s) = std::str::from_utf8(bytes) {
+        return s.to_string();
     }
     bytes.iter().map(|&b| b as char).collect()
 }
@@ -361,12 +359,11 @@ impl SpellChecker {
             },
             None => Self::empty(),
         };
-        if !sc.is_available() {
-            if let Some(list) = WORD_LISTS.iter().map(Path::new).find(|p| p.is_file()) {
-                if let Ok(bytes) = std::fs::read(list) {
-                    sc = Self::from_word_list(&decode(&bytes, false));
-                }
-            }
+        if !sc.is_available()
+            && let Some(list) = WORD_LISTS.iter().map(Path::new).find(|p| p.is_file())
+            && let Ok(bytes) = std::fs::read(list)
+        {
+            sc = Self::from_word_list(&decode(&bytes, false));
         }
         let path = super::config::config_dir().join("dictionary.txt");
         if let Ok(text) = std::fs::read_to_string(&path) {
@@ -478,8 +475,12 @@ impl SpellChecker {
                 self.compound_end.insert(lower);
             }
         }
-        let prefix_entries: Vec<(&AffixGroup, &AffixEntry)> =
-            flags.iter().filter_map(|f| affix.prefixes.get(f)).flat_map(|g| g.entries.iter().map(move |e| (g, e))).filter(|(_, e)| e.prefix_applies(&chars)).collect();
+        let prefix_entries: Vec<(&AffixGroup, &AffixEntry)> = flags
+            .iter()
+            .filter_map(|f| affix.prefixes.get(f))
+            .flat_map(|g| g.entries.iter().map(move |e| (g, e)))
+            .filter(|(_, e)| e.prefix_applies(&chars))
+            .collect();
         for f in flags {
             let Some(group) = affix.suffixes.get(f) else { continue };
             for e in &group.entries {
@@ -538,8 +539,8 @@ impl SpellChecker {
         if n < self.compound_min * 2 {
             return false;
         }
-        for k in self.compound_min..=n - self.compound_min {
-            let (left, right) = lower.split_at(idx[k]);
+        for &split in &idx[self.compound_min..=n - self.compound_min] {
+            let (left, right) = lower.split_at(split);
             let left_ok = if depth == 0 { self.compound_begin.contains(left) } else { self.compound_middle.contains(left) };
             if !left_ok {
                 continue;
@@ -586,10 +587,10 @@ impl SpellChecker {
             return true;
         }
         // Possessives ("Anna's") and hyphenated words ("well-known").
-        if let Some(stem) = w.strip_suffix("'s").or_else(|| w.strip_suffix("'S")) {
-            if self.check_form(stem) || self.personal.contains(&stem.to_lowercase()) {
-                return true;
-            }
+        if let Some(stem) = w.strip_suffix("'s").or_else(|| w.strip_suffix("'S"))
+            && (self.check_form(stem) || self.personal.contains(&stem.to_lowercase()))
+        {
+            return true;
         }
         if w.contains('-') {
             return w.split('-').filter(|p| !p.is_empty()).all(|p| self.check(p));
@@ -653,10 +654,10 @@ impl SpellChecker {
         }
         // Distance 1: generate all edits and look them up.
         for cand in edits1(&lchars, &self.alphabet) {
-            if cand != lower {
-                if let Some(form) = self.lookup_form(&cand) {
-                    found.entry(form).or_insert(1);
-                }
+            if cand != lower
+                && let Some(form) = self.lookup_form(&cand)
+            {
+                found.entry(form).or_insert(1);
             }
         }
         // Typical misspellings from the REP table ("ss" -> "ß", "f" -> "ph").
@@ -682,11 +683,11 @@ impl SpellChecker {
                     if cl.first() != lchars.first() && cl.get(1) != lchars.get(1) && cl.first() != lchars.get(1) {
                         continue;
                     }
-                    if let Some(d) = edit_distance(&lchars, &cl, 2) {
-                        if d > 0 || **cand != *w {
-                            let e = found.entry(cand.to_string()).or_insert(d);
-                            *e = (*e).min(d);
-                        }
+                    if let Some(d) = edit_distance(&lchars, &cl, 2)
+                        && (d > 0 || **cand != *w)
+                    {
+                        let e = found.entry(cand.to_string()).or_insert(d);
+                        *e = (*e).min(d);
                     }
                 }
             }
@@ -763,12 +764,12 @@ impl SpellChecker {
     /// Remove a word from the personal dictionary.
     pub fn unlearn(&mut self, word: &str) {
         let w = word.trim().to_lowercase();
-        if self.personal.remove(&w) {
-            if let Some(path) = &self.personal_path {
-                let mut words: Vec<&String> = self.personal.iter().collect();
-                words.sort();
-                std::fs::write(path, words.into_iter().map(|w| format!("{w}\n")).collect::<String>()).ok();
-            }
+        if self.personal.remove(&w)
+            && let Some(path) = &self.personal_path
+        {
+            let mut words: Vec<&String> = self.personal.iter().collect();
+            words.sort();
+            std::fs::write(path, words.into_iter().map(|w| format!("{w}\n")).collect::<String>()).ok();
         }
     }
 
@@ -812,9 +813,8 @@ fn words_in(chunk: &str) -> Vec<(usize, usize)> {
         let mut j = i;
         while j < chars.len() {
             let c = chars[j].1;
-            if c.is_alphabetic() || c.is_ascii_digit() {
-                j += 1;
-            } else if matches!(c, '\'' | '’' | '-') && j + 1 < chars.len() && chars[j + 1].1.is_alphabetic() {
+            let joiner = matches!(c, '\'' | '’' | '-') && j + 1 < chars.len() && chars[j + 1].1.is_alphabetic();
+            if c.is_alphabetic() || c.is_ascii_digit() || joiner {
                 j += 1;
             } else {
                 break;
@@ -961,9 +961,9 @@ SFX D Y 2\nSFX D   0     d          e\nSFX D   0     ed         [^ey]\n\nSFX G Y
         assert!(!sc.check("Türhaus"));
         let num = SpellChecker::from_dictionary("1\nfoo/1,2\n", "FLAG num\nSFX 2 Y 1\nSFX 2 0 bar .\n");
         assert!(num.check("foobar"));
-        let list = SpellChecker::from_word_list("apple\nbanana\n");
-        assert!(list.check("Apple") && !list.check("appel"));
-        assert_eq!(list.suggest("appel", 1), vec!["apple".to_string()]);
+        let list = SpellChecker::from_word_list("cherry\nbanana\n");
+        assert!(list.check("Cherry") && !list.check("chery"));
+        assert_eq!(list.suggest("chery", 1), vec!["cherry".to_string()]);
     }
 
     #[test]

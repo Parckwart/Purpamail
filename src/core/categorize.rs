@@ -25,46 +25,196 @@ fn keyword_regex(words: &[&str]) -> Regex {
 static TRANSACTION: Lazy<Regex> = Lazy::new(|| {
     keyword_regex(&[
         // English
-        "receipt", "your receipt", "order confirmation", "order confirmed", "your order", "order number", "order #", "order no",
-        "invoice", "your invoice", "payment received", "payment confirmation", "payment confirmed", "payment successful",
-        "has shipped", "have shipped", "shipped", "shipping confirmation", "shipment", "dispatched", "tracking number",
-        "track your package", "track your order", "out for delivery", "has been delivered", "delivered", "delivery",
-        "bank statement", "statement is available", "account statement", "booking confirmation", "booking reference",
-        "reservation", "your reservation", "itinerary", "e-ticket", "eticket", "boarding pass", "your ticket", "tickets",
-        "refund", "refunded", "transaction", "purchase", "subscription renewal", "renewal confirmation", "amount due",
-        "billing", "paid", "total",
+        "receipt",
+        "your receipt",
+        "order confirmation",
+        "order confirmed",
+        "your order",
+        "order number",
+        "order #",
+        "order no",
+        "invoice",
+        "your invoice",
+        "payment received",
+        "payment confirmation",
+        "payment confirmed",
+        "payment successful",
+        "has shipped",
+        "have shipped",
+        "shipped",
+        "shipping confirmation",
+        "shipment",
+        "dispatched",
+        "tracking number",
+        "track your package",
+        "track your order",
+        "out for delivery",
+        "has been delivered",
+        "delivered",
+        "delivery",
+        "bank statement",
+        "statement is available",
+        "account statement",
+        "booking confirmation",
+        "booking reference",
+        "reservation",
+        "your reservation",
+        "itinerary",
+        "e-ticket",
+        "eticket",
+        "boarding pass",
+        "your ticket",
+        "tickets",
+        "refund",
+        "refunded",
+        "transaction",
+        "purchase",
+        "subscription renewal",
+        "renewal confirmation",
+        "amount due",
+        "billing",
+        "paid",
+        "total",
         // German
-        "rechnung", "ihre rechnung", "deine rechnung", "bestellung", "ihre bestellung", "deine bestellung", "bestellbestätigung",
-        "auftragsbestätigung", "zahlungsbestätigung", "zahlung erhalten", "quittung", "beleg", "versandbestätigung",
-        "versandt", "verschickt", "sendungsverfolgung", "sendungsnummer", "lieferung", "zugestellt", "paket",
-        "kontoauszug", "buchungsbestätigung", "buchung", "reservierung", "fahrkarte", "rückerstattung", "erstattung",
-        "kaufbestätigung", "gesamtbetrag", "betrag",
+        "rechnung",
+        "ihre rechnung",
+        "deine rechnung",
+        "bestellung",
+        "ihre bestellung",
+        "deine bestellung",
+        "bestellbestätigung",
+        "auftragsbestätigung",
+        "zahlungsbestätigung",
+        "zahlung erhalten",
+        "quittung",
+        "beleg",
+        "versandbestätigung",
+        "versandt",
+        "verschickt",
+        "sendungsverfolgung",
+        "sendungsnummer",
+        "lieferung",
+        "zugestellt",
+        "paket",
+        "kontoauszug",
+        "buchungsbestätigung",
+        "buchung",
+        "reservierung",
+        "fahrkarte",
+        "rückerstattung",
+        "erstattung",
+        "kaufbestätigung",
+        "gesamtbetrag",
+        "betrag",
     ])
 });
 
 /// Phrases that strongly indicate a transaction even on their own.
 static TRANSACTION_STRONG: Lazy<Regex> = Lazy::new(|| {
     keyword_regex(&[
-        "receipt", "order confirmation", "order confirmed", "your order", "invoice", "payment received", "payment confirmation",
-        "has shipped", "shipping confirmation", "tracking number", "out for delivery", "has been delivered", "bank statement",
-        "statement is available", "booking confirmation", "your reservation", "itinerary", "e-ticket", "boarding pass", "refund",
-        "rechnung", "bestellbestätigung", "auftragsbestätigung", "zahlungsbestätigung", "quittung", "versandbestätigung",
-        "sendungsverfolgung", "zugestellt", "kontoauszug", "buchungsbestätigung", "kaufbestätigung", "rückerstattung",
+        "receipt",
+        "order confirmation",
+        "order confirmed",
+        "your order",
+        "invoice",
+        "payment received",
+        "payment confirmation",
+        "has shipped",
+        "shipping confirmation",
+        "tracking number",
+        "out for delivery",
+        "has been delivered",
+        "bank statement",
+        "statement is available",
+        "booking confirmation",
+        "your reservation",
+        "itinerary",
+        "e-ticket",
+        "boarding pass",
+        "refund",
+        "rechnung",
+        "bestellbestätigung",
+        "auftragsbestätigung",
+        "zahlungsbestätigung",
+        "quittung",
+        "versandbestätigung",
+        "sendungsverfolgung",
+        "zugestellt",
+        "kontoauszug",
+        "buchungsbestätigung",
+        "kaufbestätigung",
+        "rückerstattung",
     ])
 });
 
 static PROMOTION: Lazy<Regex> = Lazy::new(|| {
     keyword_regex(&[
         // English
-        "sale", "on sale", "discount", "discounts", "coupon", "coupons", "promo code", "promo", "voucher", "deal", "deals",
-        "limited time", "limited-time", "special offer", "offer", "offers", "free shipping", "shop now", "buy now", "order now",
-        "save up to", "save", "exclusive", "black friday", "cyber monday", "last chance", "new arrivals", "clearance",
-        "bestseller", "best sellers", "don't miss", "hurry", "ends tonight", "ends soon", "flash sale", "members only",
-        "% off", "percent off", "off everything", "gift card", "bogo", "lowest price",
+        "sale",
+        "on sale",
+        "discount",
+        "discounts",
+        "coupon",
+        "coupons",
+        "promo code",
+        "promo",
+        "voucher",
+        "deal",
+        "deals",
+        "limited time",
+        "limited-time",
+        "special offer",
+        "offer",
+        "offers",
+        "free shipping",
+        "shop now",
+        "buy now",
+        "order now",
+        "save up to",
+        "save",
+        "exclusive",
+        "black friday",
+        "cyber monday",
+        "last chance",
+        "new arrivals",
+        "clearance",
+        "bestseller",
+        "best sellers",
+        "don't miss",
+        "hurry",
+        "ends tonight",
+        "ends soon",
+        "flash sale",
+        "members only",
+        "% off",
+        "percent off",
+        "off everything",
+        "gift card",
+        "bogo",
+        "lowest price",
         // German
-        "rabatt", "rabatte", "gutschein", "gutscheincode", "angebot", "angebote", "sonderangebot", "aktion", "sparen",
-        "jetzt sparen", "reduziert", "jetzt kaufen", "jetzt shoppen", "versandkostenfrei", "nur heute", "schnäppchen",
-        "ausverkauf", "neuheiten", "exklusiv", "letzte chance", "nicht verpassen", "bis zu",
+        "rabatt",
+        "rabatte",
+        "gutschein",
+        "gutscheincode",
+        "angebot",
+        "angebote",
+        "sonderangebot",
+        "aktion",
+        "sparen",
+        "jetzt sparen",
+        "reduziert",
+        "jetzt kaufen",
+        "jetzt shoppen",
+        "versandkostenfrei",
+        "nur heute",
+        "schnäppchen",
+        "ausverkauf",
+        "neuheiten",
+        "exklusiv",
+        "letzte chance",
+        "nicht verpassen",
+        "bis zu",
     ])
 });
 
@@ -73,17 +223,70 @@ static PERCENT_OFF: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\d{1,2}\s?%\s?(?
 static UPDATES: Lazy<Regex> = Lazy::new(|| {
     keyword_regex(&[
         // English
-        "newsletter", "digest", "weekly digest", "daily digest", "notification", "notifications", "security alert",
-        "new sign-in", "new sign in", "sign-in attempt", "new login", "login attempt", "password", "reset your password",
-        "verify your", "verification code", "confirm your email", "account", "your account", "update", "updates",
-        "what's new", "weekly", "monthly", "mentioned you", "commented", "replied to", "liked your", "followed you",
-        "new follower", "wants to connect", "invitation to connect", "reminder", "your subscription", "terms of service",
-        "privacy policy", "release notes", "changelog", "status update", "two-factor", "2fa", "one-time code",
+        "newsletter",
+        "digest",
+        "weekly digest",
+        "daily digest",
+        "notification",
+        "notifications",
+        "security alert",
+        "new sign-in",
+        "new sign in",
+        "sign-in attempt",
+        "new login",
+        "login attempt",
+        "password",
+        "reset your password",
+        "verify your",
+        "verification code",
+        "confirm your email",
+        "account",
+        "your account",
+        "update",
+        "updates",
+        "what's new",
+        "weekly",
+        "monthly",
+        "mentioned you",
+        "commented",
+        "replied to",
+        "liked your",
+        "followed you",
+        "new follower",
+        "wants to connect",
+        "invitation to connect",
+        "reminder",
+        "your subscription",
+        "terms of service",
+        "privacy policy",
+        "release notes",
+        "changelog",
+        "status update",
+        "two-factor",
+        "2fa",
+        "one-time code",
         // German
-        "benachrichtigung", "sicherheitshinweis", "sicherheitswarnung", "neue anmeldung", "anmeldung", "passwort",
-        "kennwort", "bestätigen sie", "bestätige deine", "konto", "ihr konto", "dein konto", "neuigkeiten",
-        "wöchentlich", "monatlich", "erinnerung", "hat dich erwähnt", "hat kommentiert", "datenschutz",
-        "nutzungsbedingungen", "bestätigungscode",
+        "benachrichtigung",
+        "sicherheitshinweis",
+        "sicherheitswarnung",
+        "neue anmeldung",
+        "anmeldung",
+        "passwort",
+        "kennwort",
+        "bestätigen sie",
+        "bestätige deine",
+        "konto",
+        "ihr konto",
+        "dein konto",
+        "neuigkeiten",
+        "wöchentlich",
+        "monatlich",
+        "erinnerung",
+        "hat dich erwähnt",
+        "hat kommentiert",
+        "datenschutz",
+        "nutzungsbedingungen",
+        "bestätigungscode",
     ])
 });
 
@@ -98,7 +301,8 @@ static ROLE_LOCAL: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Headers that marketing / bulk sending platforms add.
-const BULK_HEADERS: [&str; 8] = ["X-Campaign", "X-CampaignID", "X-Mailchimp-Campaign", "X-Mailgun-Tag", "X-SG-EID", "X-Newsletter", "X-Marketing", "X-Mailer-Campaign"];
+const BULK_HEADERS: [&str; 8] =
+    ["X-Campaign", "X-CampaignID", "X-Mailchimp-Campaign", "X-Mailgun-Tag", "X-SG-EID", "X-Newsletter", "X-Marketing", "X-Mailer-Campaign"];
 
 /// Numeric signal strengths computed for a message, exposed for debugging and tests.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -156,7 +360,10 @@ pub fn signals(p: &ParsedMessage) -> Signals {
     let body = body_prefix(p);
 
     let mut s = Signals {
-        has_list: !p.list_id.trim().is_empty() || !p.list_unsubscribe.trim().is_empty() || p.header("List-Unsubscribe").is_some() || p.header("List-Id").is_some(),
+        has_list: !p.list_id.trim().is_empty()
+            || !p.list_unsubscribe.trim().is_empty()
+            || p.header("List-Unsubscribe").is_some()
+            || p.header("List-Id").is_some(),
         bulk: matches!(precedence.as_str(), "bulk" | "list" | "junk"),
         automated_sender: !local.is_empty() && NOREPLY_LOCAL.is_match(&local),
         role_sender: !local.is_empty() && ROLE_LOCAL.is_match(&local),
@@ -227,19 +434,32 @@ mod tests {
 
     #[test]
     fn personal_mail_is_primary() {
-        let p = parse("From: Anna Berger <anna.berger@example.net>\r\nTo: me@example.org\r\nSubject: Dinner on Saturday?", "Hi! Do you want to come over for dinner? I found a great deal on fresh fish, and we could split the invoice for the wine.");
+        let p = parse(
+            "From: Anna Berger <anna.berger@example.net>\r\nTo: me@example.org\r\nSubject: Dinner on Saturday?",
+            "Hi! Do you want to come over for dinner? I found a great deal on fresh fish, and we could split the invoice for the wine.",
+        );
         assert_eq!(categorize(&p), Category::Primary);
-        let p = parse("From: Tom <tom@example.net>\r\nTo: me@example.org\r\nSubject: Re: your order of the photos", "The prints have shipped, receipt attached.");
+        let p =
+            parse("From: Tom <tom@example.net>\r\nTo: me@example.org\r\nSubject: Re: your order of the photos", "The prints have shipped, receipt attached.");
         assert_eq!(categorize(&p), Category::Primary);
     }
 
     #[test]
     fn receipts_and_shipping_are_transactions() {
-        let p = parse("From: Corner Books <orders@cornerbooks.example>\r\nTo: me@example.org\r\nSubject: Your order #4411 has shipped", "Good news! Your package is on the way. Tracking number: 1Z999.");
+        let p = parse(
+            "From: Corner Books <orders@cornerbooks.example>\r\nTo: me@example.org\r\nSubject: Your order #4411 has shipped",
+            "Good news! Your package is on the way. Tracking number: 1Z999.",
+        );
         assert_eq!(categorize(&p), Category::Transactions);
-        let p = parse("From: Stadtwerke <noreply@stadtwerke.example>\r\nTo: me@example.org\r\nSubject: Ihre Rechnung für September", "Sehr geehrte Kundin, Ihre Rechnung steht bereit. Gesamtbetrag: 42,10 EUR.");
+        let p = parse(
+            "From: Stadtwerke <noreply@stadtwerke.example>\r\nTo: me@example.org\r\nSubject: Ihre Rechnung für September",
+            "Sehr geehrte Kundin, Ihre Rechnung steht bereit. Gesamtbetrag: 42,10 EUR.",
+        );
         assert_eq!(categorize(&p), Category::Transactions);
-        let p = parse("From: Railways <tickets@rail.example>\r\nTo: me@example.org\r\nSubject: Booking confirmation and e-ticket", "Your itinerary: Berlin → Hamburg.");
+        let p = parse(
+            "From: Railways <tickets@rail.example>\r\nTo: me@example.org\r\nSubject: Booking confirmation and e-ticket",
+            "Your itinerary: Berlin → Hamburg.",
+        );
         assert_eq!(categorize(&p), Category::Transactions);
     }
 
@@ -250,7 +470,10 @@ mod tests {
             "Shop now and save on our new arrivals. Use promo code FERN30. Free shipping on all orders.",
         );
         assert_eq!(categorize(&p), Category::Promotions);
-        let p = parse("From: Shop <info@laden.example>\r\nTo: me@example.org\r\nPrecedence: bulk\r\nSubject: Nur heute: 20% Rabatt mit Gutschein", "Jetzt shoppen und sparen!");
+        let p = parse(
+            "From: Shop <info@laden.example>\r\nTo: me@example.org\r\nPrecedence: bulk\r\nSubject: Nur heute: 20% Rabatt mit Gutschein",
+            "Jetzt shoppen und sparen!",
+        );
         assert_eq!(categorize(&p), Category::Promotions);
     }
 
@@ -261,7 +484,10 @@ mod tests {
             "Articles, release notes and community updates from the past week.",
         );
         assert_eq!(categorize(&p), Category::Updates);
-        let p = parse("From: Example Cloud <no-reply@cloud.example>\r\nTo: me@example.org\r\nSubject: New sign-in to your account", "We noticed a new sign-in from Linux.");
+        let p = parse(
+            "From: Example Cloud <no-reply@cloud.example>\r\nTo: me@example.org\r\nSubject: New sign-in to your account",
+            "We noticed a new sign-in from Linux.",
+        );
         assert_eq!(categorize(&p), Category::Updates);
     }
 

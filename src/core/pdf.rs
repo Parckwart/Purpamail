@@ -440,7 +440,7 @@ fn serialize(title: &str, pages: &[String]) -> Vec<u8> {
     let xref = out.len();
     let mut x = format!("xref\n0 {}\n0000000000 65535 f \n", offsets.len() + 1);
     for o in &offsets {
-        let _ = write!(x, "{o:010} 00000 n \n");
+        let _ = writeln!(x, "{o:010} 00000 n ");
     }
     let _ = write!(x, "trailer\n<< /Size {} /Root 1 0 R /Info 6 0 R >>\nstartxref\n{xref}\n%%EOF\n", offsets.len() + 1);
     out.extend_from_slice(x.as_bytes());
@@ -497,7 +497,8 @@ mod tests {
 
     #[test]
     fn single_page_structure() {
-        let pdf = render("Hello (World)", &[PdfLine::new("Subject: Grüße “quoted” – €5 … • ✓").bold().size(14.0), PdfLine::new("Body text").gray(0.4).indent(20.0)]);
+        let pdf =
+            render("Hello (World)", &[PdfLine::new("Subject: Grüße “quoted” – €5 … • ✓").bold().size(14.0), PdfLine::new("Body text").gray(0.4).indent(20.0)]);
         let n = check_structure(&pdf);
         assert_eq!(n, 9); // 6 fixed objects + page + content + free entry
         let s = String::from_utf8_lossy(&pdf);

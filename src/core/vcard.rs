@@ -93,7 +93,8 @@ fn is_qp(p: &Property) -> bool {
 }
 
 fn is_base64(p: &Property) -> bool {
-    p.param("ENCODING").is_some_and(|e| e.eq_ignore_ascii_case("b") || e.eq_ignore_ascii_case("base64")) || p.params.iter().any(|(k, _)| k.eq_ignore_ascii_case("BASE64"))
+    p.param("ENCODING").is_some_and(|e| e.eq_ignore_ascii_case("b") || e.eq_ignore_ascii_case("base64"))
+        || p.params.iter().any(|(k, _)| k.eq_ignore_ascii_case("BASE64"))
 }
 
 /// Unfold vCard lines: RFC folding (leading whitespace) and quoted-printable soft breaks.
@@ -101,13 +102,11 @@ fn logical_lines(s: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut qp_continues = false;
     for raw in s.replace("\r\n", "\n").replace('\r', "\n").split('\n') {
-        if qp_continues {
-            if let Some(last) = out.last_mut() {
-                last.pop(); // the soft-break '='
-                last.push_str(raw.trim_start());
-                qp_continues = last.ends_with('=') && line_is_qp(last);
-                continue;
-            }
+        if qp_continues && let Some(last) = out.last_mut() {
+            last.pop(); // the soft-break '='
+            last.push_str(raw.trim_start());
+            qp_continues = last.ends_with('=') && line_is_qp(last);
+            continue;
         }
         if (raw.starts_with(' ') || raw.starts_with('\t')) && !out.is_empty() {
             let last = out.last_mut().unwrap();
@@ -134,9 +133,9 @@ fn text_value(p: &Property) -> String {
 }
 
 fn has_type(p: &Property, t: &str) -> bool {
-    p.params.iter().any(|(k, v)| {
-        (k.eq_ignore_ascii_case("TYPE") && v.split(',').any(|x| x.trim().eq_ignore_ascii_case(t))) || (v.is_empty() && k.eq_ignore_ascii_case(t))
-    })
+    p.params
+        .iter()
+        .any(|(k, v)| (k.eq_ignore_ascii_case("TYPE") && v.split(',').any(|x| x.trim().eq_ignore_ascii_case(t))) || (v.is_empty() && k.eq_ignore_ascii_case(t)))
 }
 
 fn is_preferred(p: &Property) -> bool {
@@ -225,7 +224,9 @@ pub fn parse(s: &str) -> Vec<Contact> {
             }
             "FN" => fn_name = unescape(&text_value(&p)).trim().to_string(),
             "NICKNAME" => c.nickname = split_components(&text_value(&p), ',').into_iter().next().unwrap_or_default().trim().to_string(),
-            "ORG" => c.organization = split_components(&text_value(&p), ';').into_iter().map(|s| s.trim().to_string()).find(|s| !s.is_empty()).unwrap_or_default(),
+            "ORG" => {
+                c.organization = split_components(&text_value(&p), ';').into_iter().map(|s| s.trim().to_string()).find(|s| !s.is_empty()).unwrap_or_default()
+            }
             "EMAIL" => {
                 let v = unescape(&text_value(&p));
                 let v = v.trim().trim_start_matches("mailto:").to_string();
@@ -360,7 +361,10 @@ BEGIN:VCARD\nVERSION:2.1\nN;CHARSET=ISO-8859-1;ENCODING=QUOTED-PRINTABLE:Gr=FC=D
             phones: vec!["+44 20 7946 0000".into()],
             notes: "Line one\nLine two with a very long text that definitely needs folding because it exceeds seventy five octets".into(),
             vip: true,
-            photo: Some(vec![0x89, b'P', b'N', b'G', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]),
+            photo: Some(vec![
+                0x89, b'P', b'N', b'G', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+                33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+            ]),
             ..Default::default()
         };
         let v = to_vcard(&c);

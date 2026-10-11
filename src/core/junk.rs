@@ -36,14 +36,64 @@ static WORD: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\p{L}\p{N}$€£!'’\-]+"
 
 /// Phrases typical of junk mail (English and German), used by the heuristic fallback.
 const SPAM_PHRASES: &[&str] = &[
-    "viagra", "cialis", "levitra", "you have won", "you've won", "you are a winner", "lottery", "claim your prize", "claim your reward",
-    "100% free", "risk-free", "risk free", "act now", "limited time only", "click here to claim", "wire transfer", "western union",
-    "bitcoin investment", "crypto investment", "double your money", "make money fast", "earn money from home", "work from home and earn",
-    "cheap meds", "no prescription", "weight loss", "lose weight fast", "inheritance", "next of kin", "beneficiary", "dear friend",
-    "dear beneficiary", "urgent reply", "strictly confidential", "million dollars", "million usd", "congratulations you", "online casino",
-    "casino bonus", "hot singles", "enlargement", "unclaimed funds", "your account has been suspended", "verify your account immediately",
-    "nigeria", "barrister", "100% guaranteed", "this is not spam", "remove me", "sie haben gewonnen", "gewinnspiel gewonnen", "erbschaft",
-    "dringende antwort", "schnell geld verdienen", "geld verdienen von zu hause", "streng vertraulich", "millionen euro", "kostenlos und unverbindlich",
+    "viagra",
+    "cialis",
+    "levitra",
+    "you have won",
+    "you've won",
+    "you are a winner",
+    "lottery",
+    "claim your prize",
+    "claim your reward",
+    "100% free",
+    "risk-free",
+    "risk free",
+    "act now",
+    "limited time only",
+    "click here to claim",
+    "wire transfer",
+    "western union",
+    "bitcoin investment",
+    "crypto investment",
+    "double your money",
+    "make money fast",
+    "earn money from home",
+    "work from home and earn",
+    "cheap meds",
+    "no prescription",
+    "weight loss",
+    "lose weight fast",
+    "inheritance",
+    "next of kin",
+    "beneficiary",
+    "dear friend",
+    "dear beneficiary",
+    "urgent reply",
+    "strictly confidential",
+    "million dollars",
+    "million usd",
+    "congratulations you",
+    "online casino",
+    "casino bonus",
+    "hot singles",
+    "enlargement",
+    "unclaimed funds",
+    "your account has been suspended",
+    "verify your account immediately",
+    "nigeria",
+    "barrister",
+    "100% guaranteed",
+    "this is not spam",
+    "remove me",
+    "sie haben gewonnen",
+    "gewinnspiel gewonnen",
+    "erbschaft",
+    "dringende antwort",
+    "schnell geld verdienen",
+    "geld verdienen von zu hause",
+    "streng vertraulich",
+    "millionen euro",
+    "kostenlos und unverbindlich",
 ];
 
 /// Probability (0..1) that a message is junk.
@@ -202,18 +252,18 @@ pub fn tokenize(p: &ParsedMessage) -> HashSet<String> {
         t.insert("from:none".into());
     }
     word_tokens(&p.from.name, "fromname:", &mut t);
-    if let (Some(r), Some((_, fd))) = (p.reply_to.first(), email.rsplit_once('@')) {
-        if !r.domain().eq_ignore_ascii_case(fd) {
-            t.insert("replyto:otherdomain".into());
-        }
+    if let (Some(r), Some((_, fd))) = (p.reply_to.first(), email.rsplit_once('@'))
+        && !r.domain().eq_ignore_ascii_case(fd)
+    {
+        t.insert("replyto:otherdomain".into());
     }
     if p.to.is_empty() && p.cc.is_empty() {
         t.insert("to:none".into());
     }
-    if let Some(xm) = p.header("X-Mailer").or(p.header("User-Agent")) {
-        if let Some(first) = xm.split_whitespace().next() {
-            t.insert(format!("mailer:{}", first.to_lowercase()));
-        }
+    if let Some(xm) = p.header("X-Mailer").or(p.header("User-Agent"))
+        && let Some(first) = xm.split_whitespace().next()
+    {
+        t.insert(format!("mailer:{}", first.to_lowercase()));
     }
     if p.html.is_some() && p.text.as_deref().is_none_or(|s| s.trim().is_empty()) {
         t.insert("body:html-only".into());
@@ -376,7 +426,9 @@ mod tests {
     use crate::core::mime;
 
     fn msg(id: usize, from: &str, subject: &str, body: &str) -> ParsedMessage {
-        let raw = format!("From: {from}\r\nTo: me@example.org\r\nSubject: {subject}\r\nMessage-ID: <m{id}@test>\r\nDate: Mon, 6 Oct 2025 10:00:00 +0000\r\n\r\n{body}\r\n");
+        let raw = format!(
+            "From: {from}\r\nTo: me@example.org\r\nSubject: {subject}\r\nMessage-ID: <m{id}@test>\r\nDate: Mon, 6 Oct 2025 10:00:00 +0000\r\n\r\n{body}\r\n"
+        );
         mime::parse(raw.as_bytes()).unwrap()
     }
 
@@ -403,7 +455,12 @@ mod tests {
     #[test]
     fn heuristics_are_conservative_before_training() {
         let store = Store::open_in_memory().unwrap();
-        let legit = msg(1, "Anna <anna@example.net>", "Free tickets for the concert?", "My friend has two free tickets. Do you want to come along? It's risk free, she said.");
+        let legit = msg(
+            1,
+            "Anna <anna@example.net>",
+            "Free tickets for the concert?",
+            "My friend has two free tickets. Do you want to come along? It's risk free, she said.",
+        );
         assert!(score(&store, &legit) < 0.5);
         let blatant = msg(
             2,
@@ -462,9 +519,25 @@ mod tests {
 
     #[test]
     fn tokens_and_math() {
-        let p = msg(1, "Anna <anna@mail.example.net>", "HELLO THERE FRIEND!!", "See https://www.shop.example.com/a and http://192.168.0.1/x for déjà-vu items 12345");
+        let p = msg(
+            1,
+            "Anna <anna@mail.example.net>",
+            "HELLO THERE FRIEND!!",
+            "See https://www.shop.example.com/a and http://192.168.0.1/x for déjà-vu items 12345",
+        );
         let t = tokenize(&p);
-        for k in ["s:hello", "subject:allcaps", "subject:exclamations", "from:anna@mail.example.net", "fromdomain:mail.example.net", "url:www.shop.example.com", "url:example.com", "url:ip-address", "déjà-vu", "items"] {
+        for k in [
+            "s:hello",
+            "subject:allcaps",
+            "subject:exclamations",
+            "from:anna@mail.example.net",
+            "fromdomain:mail.example.net",
+            "url:www.shop.example.com",
+            "url:example.com",
+            "url:ip-address",
+            "déjà-vu",
+            "items",
+        ] {
             assert!(t.contains(k), "missing {k}: {t:?}");
         }
         assert!(!t.contains("12345"));

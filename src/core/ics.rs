@@ -287,7 +287,11 @@ fn eu(std_hours: i64) -> TzRule {
     let std = std_hours * H;
     TzRule {
         std,
-        dst: Some((std + H, Transition { month: 3, week: -1, weekday: Weekday::Sun, at: H + std }, Transition { month: 10, week: -1, weekday: Weekday::Sun, at: H + std + H })),
+        dst: Some((
+            std + H,
+            Transition { month: 3, week: -1, weekday: Weekday::Sun, at: H + std },
+            Transition { month: 10, week: -1, weekday: Weekday::Sun, at: H + std + H },
+        )),
     }
 }
 
@@ -296,7 +300,11 @@ fn us(std_hours: i64) -> TzRule {
     let std = std_hours * H;
     TzRule {
         std,
-        dst: Some((std + H, Transition { month: 3, week: 2, weekday: Weekday::Sun, at: 2 * H }, Transition { month: 11, week: 1, weekday: Weekday::Sun, at: 2 * H })),
+        dst: Some((
+            std + H,
+            Transition { month: 3, week: 2, weekday: Weekday::Sun, at: 2 * H },
+            Transition { month: 11, week: 1, weekday: Weekday::Sun, at: 2 * H },
+        )),
     }
 }
 
@@ -304,15 +312,49 @@ fn builtin_zone(tzid: &str) -> Option<TzRule> {
     let id = tzid.trim().trim_matches('"');
     let lower = id.to_ascii_lowercase();
     let eu1 = [
-        "europe/berlin", "europe/paris", "europe/amsterdam", "europe/brussels", "europe/vienna", "europe/zurich", "europe/rome", "europe/madrid",
-        "europe/stockholm", "europe/oslo", "europe/copenhagen", "europe/prague", "europe/warsaw", "europe/budapest", "europe/luxembourg",
-        "europe/belgrade", "europe/zagreb", "europe/ljubljana", "europe/bratislava", "europe/monaco", "europe/malta", "cet", "met",
-        "w. europe standard time", "central europe standard time", "central european standard time", "romance standard time",
+        "europe/berlin",
+        "europe/paris",
+        "europe/amsterdam",
+        "europe/brussels",
+        "europe/vienna",
+        "europe/zurich",
+        "europe/rome",
+        "europe/madrid",
+        "europe/stockholm",
+        "europe/oslo",
+        "europe/copenhagen",
+        "europe/prague",
+        "europe/warsaw",
+        "europe/budapest",
+        "europe/luxembourg",
+        "europe/belgrade",
+        "europe/zagreb",
+        "europe/ljubljana",
+        "europe/bratislava",
+        "europe/monaco",
+        "europe/malta",
+        "cet",
+        "met",
+        "w. europe standard time",
+        "central europe standard time",
+        "central european standard time",
+        "romance standard time",
     ];
     let eu0 = ["europe/london", "europe/dublin", "europe/lisbon", "atlantic/canary", "wet", "gmt standard time"];
     let eu2 = [
-        "europe/athens", "europe/helsinki", "europe/kiev", "europe/kyiv", "europe/bucharest", "europe/sofia", "europe/riga", "europe/tallinn",
-        "europe/vilnius", "eet", "e. europe standard time", "fle standard time", "gtb standard time",
+        "europe/athens",
+        "europe/helsinki",
+        "europe/kiev",
+        "europe/kyiv",
+        "europe/bucharest",
+        "europe/sofia",
+        "europe/riga",
+        "europe/tallinn",
+        "europe/vilnius",
+        "eet",
+        "e. europe standard time",
+        "fle standard time",
+        "gtb standard time",
     ];
     let matches = |list: &[&str]| list.iter().any(|z| lower == *z || lower.ends_with(&format!("/{z}")));
     if matches(&eu1) {
@@ -360,21 +402,29 @@ fn builtin_zone(tzid: &str) -> Option<TzRule> {
     if matches(&["australia/sydney", "australia/melbourne", "australia/canberra", "australia/hobart", "aus eastern standard time"]) {
         return Some(TzRule {
             std: 10 * H,
-            dst: Some((11 * H, Transition { month: 10, week: 1, weekday: Weekday::Sun, at: 2 * H }, Transition { month: 4, week: 1, weekday: Weekday::Sun, at: 3 * H })),
+            dst: Some((
+                11 * H,
+                Transition { month: 10, week: 1, weekday: Weekday::Sun, at: 2 * H },
+                Transition { month: 4, week: 1, weekday: Weekday::Sun, at: 3 * H },
+            )),
         });
     }
     if matches(&["pacific/auckland", "new zealand standard time"]) {
         return Some(TzRule {
             std: 12 * H,
-            dst: Some((13 * H, Transition { month: 9, week: -1, weekday: Weekday::Sun, at: 2 * H }, Transition { month: 4, week: 1, weekday: Weekday::Sun, at: 3 * H })),
+            dst: Some((
+                13 * H,
+                Transition { month: 9, week: -1, weekday: Weekday::Sun, at: 2 * H },
+                Transition { month: 4, week: 1, weekday: Weekday::Sun, at: 3 * H },
+            )),
         });
     }
     // "UTC+01:00" / "GMT-5" style identifiers
     for prefix in ["utc", "gmt"] {
-        if let Some(rest) = lower.strip_prefix(prefix) {
-            if let Some(off) = parse_offset(rest.trim()) {
-                return Some(TzRule::fixed(off));
-            }
+        if let Some(rest) = lower.strip_prefix(prefix)
+            && let Some(off) = parse_offset(rest.trim())
+        {
+            return Some(TzRule::fixed(off));
         }
     }
     None
@@ -551,10 +601,11 @@ fn parse_full(ics: &str) -> Option<Parsed> {
                         if let Some(o) = cur.take() {
                             obs.push(o);
                         }
-                    } else if comp == "VTIMEZONE" && !tzid.is_empty() {
-                        if let Some(rule) = rule_from_observances(&obs) {
-                            zones.push((tzid.clone(), rule));
-                        }
+                    } else if comp == "VTIMEZONE"
+                        && !tzid.is_empty()
+                        && let Some(rule) = rule_from_observances(&obs)
+                    {
+                        zones.push((tzid.clone(), rule));
                     }
                     stack.pop();
                 }
@@ -661,14 +712,14 @@ fn parse_full(ics: &str) -> Option<Parsed> {
             _ => {}
         }
     }
-    if ev.end.is_none() {
-        if let Some(s) = ev.start {
-            ev.end = match duration {
-                Some(d) => Some(s + d),
-                None if ev.all_day => Some(s + 86400),
-                None => None,
-            };
-        }
+    if ev.end.is_none()
+        && let Some(s) = ev.start
+    {
+        ev.end = match duration {
+            Some(d) => Some(s + d),
+            None if ev.all_day => Some(s + 86400),
+            None => None,
+        };
     }
     Some(Parsed { event: ev, organizer, attendees })
 }

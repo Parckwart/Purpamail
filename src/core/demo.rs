@@ -194,11 +194,11 @@ struct Boxes {
 
 fn custom_mailbox(store: &Store, path: &str, parent: Option<MailboxId>) -> Result<MailboxId> {
     let id = store.ensure_mailbox(LOCAL_ACCOUNT, path, MailboxRole::Custom)?;
-    if parent.is_some() {
-        if let Some(mut mb) = store.mailbox(id) {
-            mb.parent = parent;
-            store.upsert_mailbox(&mb)?;
-        }
+    if parent.is_some()
+        && let Some(mut mb) = store.mailbox(id)
+    {
+        mb.parent = parent;
+        store.upsert_mailbox(&mb)?;
     }
     Ok(id)
 }
@@ -429,11 +429,44 @@ fn add_contacts(store: &Store) -> Result<()> {
             vip: true,
             ..Default::default()
         },
-        Contact { first_name: "Jonas".into(), last_name: "Weber".into(), emails: vec![JONAS.email.into()], phones: vec!["+49 151 23456789".into()], notes: "Hiking buddy.".into(), ..Default::default() },
-        Contact { first_name: "Lena".into(), last_name: "Morgan".into(), nickname: "Lenny".into(), emails: vec![LENA.email.into()], phones: vec!["+1 555 201 7788".into()], notes: "Sister.".into(), ..Default::default() },
-        Contact { first_name: "Marcus".into(), last_name: "Chen".into(), organization: "Brightleaf".into(), emails: vec![MARCUS.email.into()], ..Default::default() },
-        Contact { first_name: "Hannah".into(), last_name: "Okafor".into(), organization: "Brightleaf".into(), emails: vec![HANNAH.email.into()], ..Default::default() },
-        Contact { first_name: "Sofia".into(), last_name: "Alvarez".into(), emails: vec![SOFIA.email.into()], notes: "Book club host.".into(), ..Default::default() },
+        Contact {
+            first_name: "Jonas".into(),
+            last_name: "Weber".into(),
+            emails: vec![JONAS.email.into()],
+            phones: vec!["+49 151 23456789".into()],
+            notes: "Hiking buddy.".into(),
+            ..Default::default()
+        },
+        Contact {
+            first_name: "Lena".into(),
+            last_name: "Morgan".into(),
+            nickname: "Lenny".into(),
+            emails: vec![LENA.email.into()],
+            phones: vec!["+1 555 201 7788".into()],
+            notes: "Sister.".into(),
+            ..Default::default()
+        },
+        Contact {
+            first_name: "Marcus".into(),
+            last_name: "Chen".into(),
+            organization: "Brightleaf".into(),
+            emails: vec![MARCUS.email.into()],
+            ..Default::default()
+        },
+        Contact {
+            first_name: "Hannah".into(),
+            last_name: "Okafor".into(),
+            organization: "Brightleaf".into(),
+            emails: vec![HANNAH.email.into()],
+            ..Default::default()
+        },
+        Contact {
+            first_name: "Sofia".into(),
+            last_name: "Alvarez".into(),
+            emails: vec![SOFIA.email.into()],
+            notes: "Book club host.".into(),
+            ..Default::default()
+        },
     ];
     for c in &contacts {
         if store.contact_by_email(&c.emails[0]).is_none() {
@@ -460,14 +493,16 @@ fn conversations(store: &Store, b: &Boxes) -> Result<()> {
 Could we do a kickoff call next Tuesday or Wednesday? Hannah will join from our side.\n\nBest,\nMarcus\n-- \nMarcus Chen\nHead of Marketing, Brightleaf",
     );
     put(store, b.website, &kickoff, SEEN | flags::ANSWERED, None)?;
-    let kickoff_re = M::new("relaunch-kickoff-re", ME, "Re: Brightleaf website relaunch — kickoff", at(19, 11, 40)).to(&[MARCUS]).cc(&[HANNAH]).reply_to(&kickoff).text(
-        "Hi Marcus,\n\nThanks for the summary, that sounds like a great project. Wednesday at 10:00 works for me — I'll send an invite.\n\nBest,\nAlex\n\n\
+    let kickoff_re =
+        M::new("relaunch-kickoff-re", ME, "Re: Brightleaf website relaunch — kickoff", at(19, 11, 40)).to(&[MARCUS]).cc(&[HANNAH]).reply_to(&kickoff).text(
+            "Hi Marcus,\n\nThanks for the summary, that sounds like a great project. Wednesday at 10:00 works for me — I'll send an invite.\n\nBest,\nAlex\n\n\
 On Monday, Marcus Chen wrote:\n> Could we do a kickoff call next Tuesday or Wednesday?",
-    );
+        );
     put(store, sent, &kickoff_re, SEEN, None)?;
-    let hannah1 = M::new("relaunch-hannah", HANNAH, "Re: Brightleaf website relaunch — kickoff", at(18, 8, 55)).to(&[ME, MARCUS]).reply_to(&kickoff_re).text(
-        "Hello both,\n\nWednesday at 10 is perfect. I'll bring our analytics numbers and the list of pages we can retire.\n\nHannah",
-    );
+    let hannah1 = M::new("relaunch-hannah", HANNAH, "Re: Brightleaf website relaunch — kickoff", at(18, 8, 55))
+        .to(&[ME, MARCUS])
+        .reply_to(&kickoff_re)
+        .text("Hello both,\n\nWednesday at 10 is perfect. I'll bring our analytics numbers and the list of pages we can retire.\n\nHannah");
     put(store, b.website, &hannah1, SEEN, None)?;
     let brief = M::new("relaunch-brief", MARCUS, "Re: Brightleaf website relaunch — kickoff", at(15, 16, 20))
         .to(&[ME])
@@ -476,9 +511,11 @@ On Monday, Marcus Chen wrote:\n> Could we do a kickoff call next Tuesday or Wedn
         .text("Hi Alex,\n\nThanks for a productive kickoff! Attached is the updated project brief with the goals and the rough timeline we discussed.\n\nLet me know if anything is missing.\n\nMarcus")
         .attach("project-brief.pdf", "application/pdf", brief_pdf());
     put(store, inbox, &brief, SEEN, None)?;
-    let brief_re = M::new("relaunch-brief-re", ME, "Re: Brightleaf website relaunch — kickoff", at(14, 9, 5)).to(&[MARCUS]).cc(&[HANNAH]).reply_to(&brief).text(
-        "Thanks Marcus, the brief looks complete. I'll share first wireframes by the end of next week.\n\nAlex",
-    );
+    let brief_re = M::new("relaunch-brief-re", ME, "Re: Brightleaf website relaunch — kickoff", at(14, 9, 5))
+        .to(&[MARCUS])
+        .cc(&[HANNAH])
+        .reply_to(&brief)
+        .text("Thanks Marcus, the brief looks complete. I'll share first wireframes by the end of next week.\n\nAlex");
     put(store, sent, &brief_re, SEEN, None)?;
     let timeline = M::new("relaunch-timeline", MARCUS, "Re: Brightleaf website relaunch — kickoff", at(2, 10, 30)).to(&[ME]).cc(&[HANNAH]).reply_to(&brief_re).text(
         "Hi Alex,\n\nQuick update: our board meeting moved, so we would love to see the wireframes on Thursday instead of Friday. Would that still work for you?\n\nThanks,\nMarcus",
@@ -488,9 +525,8 @@ On Monday, Marcus Chen wrote:\n> Could we do a kickoff call next Tuesday or Wedn
         "Thursday works on our side too. I booked the big meeting room from 14:00 to 15:30 and will set up a video link for anyone working from home.\n\nHannah",
     );
     put(store, inbox, &hannah2, UNREAD, None)?;
-    let contract = M::new("relaunch-contract", MARCUS, "Signed contract", at(17, 15, 10)).text(
-        "Hi Alex,\n\nGood news: the contract is signed and the purchase order is on its way to you. Looking forward to working together!\n\nMarcus",
-    );
+    let contract = M::new("relaunch-contract", MARCUS, "Signed contract", at(17, 15, 10))
+        .text("Hi Alex,\n\nGood news: the contract is signed and the purchase order is on its way to you. Looking forward to working together!\n\nMarcus");
     put(store, inbox, &contract, SEEN, None)?;
 
     // --- Weekend hike with Jonas and Tom.
@@ -498,19 +534,23 @@ On Monday, Marcus Chen wrote:\n> Could we do a kickoff call next Tuesday or Wedn
         "Hey Alex,\n\nThe weather looks fantastic for Saturday. Fancy the ridge trail again? Start at 8:30 at the station, back by late afternoon.\n\nJonas",
     );
     put(store, inbox, &hike, SEEN | flags::ANSWERED, None)?;
-    let hike_re = M::new("hike-re", ME, "Re: Weekend hike?", at(9, 20, 15)).to(&[JONAS]).cc(&[TOM]).reply_to(&hike).text(
-        "Count me in! I'm adding Tom, he wanted to join next time.\n\nAlex\n\n> The weather looks fantastic for Saturday. Fancy the ridge trail again?",
-    );
+    let hike_re =
+        M::new("hike-re", ME, "Re: Weekend hike?", at(9, 20, 15)).to(&[JONAS]).cc(&[TOM]).reply_to(&hike).text(
+            "Count me in! I'm adding Tom, he wanted to join next time.\n\nAlex\n\n> The weather looks fantastic for Saturday. Fancy the ridge trail again?",
+        );
     put(store, sent, &hike_re, SEEN, None)?;
     let hike_map = M::new("hike-map", JONAS, "Re: Weekend hike?", at(8, 7, 48))
         .to(&[ME, TOM])
         .reply_to(&hike_re)
-        .text("Great! Here's the route I have in mind — about 16 km with one steep bit after the hut. Bring water, there's no refill until the summit.\n\nJonas")
+        .text(
+            "Great! Here's the route I have in mind — about 16 km with one steep bit after the hut. Bring water, there's no refill until the summit.\n\nJonas",
+        )
         .attach("trail-map.png", "image/png", trail_map_png());
     put(store, inbox, &hike_map, SEEN, Some(FlagColor::Green))?;
-    let hike_tom = M::new("hike-tom", TOM, "Re: Weekend hike?", at(8, 12, 3)).to(&[JONAS, ME]).reply_to(&hike_map).text(
-        "Sounds great, thanks for including me! I'll bring my camera and some snacks. See you at the station.\n\nTom",
-    );
+    let hike_tom = M::new("hike-tom", TOM, "Re: Weekend hike?", at(8, 12, 3))
+        .to(&[JONAS, ME])
+        .reply_to(&hike_map)
+        .text("Sounds great, thanks for including me! I'll bring my camera and some snacks. See you at the station.\n\nTom");
     put(store, inbox, &hike_tom, SEEN, None)?;
     let hike_photos = M::new("hike-photos", TOM, "Re: Weekend hike?", at(5, 20, 12))
         .to(&[JONAS, ME])
@@ -524,13 +564,15 @@ On Monday, Marcus Chen wrote:\n> Could we do a kickoff call next Tuesday or Wedn
         "Hi Alex,\n\nMom turns 65 on the 24th! I reserved a table at Olive & Thyme for Saturday at 7pm. Could you organize the cake? She loves lemon.\n\nLove,\nLena",
     );
     put(store, inbox, &bday, SEEN | flags::ANSWERED, Some(FlagColor::Orange))?;
-    let bday_re = M::new("bday-re", ME, "Re: Mom's birthday dinner", at(6, 21, 10)).to(&[LENA]).reply_to(&bday).text(
-        "Lovely idea! I'll order a lemon cake from the bakery on Elm Street. Should we also get her the photo book we talked about?\n\nAlex",
-    );
+    let bday_re = M::new("bday-re", ME, "Re: Mom's birthday dinner", at(6, 21, 10))
+        .to(&[LENA])
+        .reply_to(&bday)
+        .text("Lovely idea! I'll order a lemon cake from the bakery on Elm Street. Should we also get her the photo book we talked about?\n\nAlex");
     put(store, sent, &bday_re, SEEN, None)?;
-    let bday2 = M::new("bday-2", LENA, "Re: Mom's birthday dinner", at(1, 8, 15)).to(&[ME]).reply_to(&bday_re).text(
-        "Yes, the photo book! I uploaded the pictures to our shared album. Can you pick it up on Friday? I'll pay you back.\n\nLena",
-    );
+    let bday2 = M::new("bday-2", LENA, "Re: Mom's birthday dinner", at(1, 8, 15))
+        .to(&[ME])
+        .reply_to(&bday_re)
+        .text("Yes, the photo book! I uploaded the pictures to our shared album. Can you pick it up on Friday? I'll pay you back.\n\nLena");
     put(store, inbox, &bday2, UNREAD, None)?;
 
     // --- Design review with Priya (VIP), high priority, attachments.
@@ -539,9 +581,10 @@ On Monday, Marcus Chen wrote:\n> Could we do a kickoff call next Tuesday or Wedn
         .attach("concept-leaf.png", "image/png", logo_png([60, 140, 90]))
         .attach("concept-geometric.png", "image/png", logo_png([40, 90, 170]));
     put(store, inbox, &logos, SEEN | flags::ANSWERED, Some(FlagColor::Red))?;
-    let logos_re = M::new("logos-re", ME, "Re: Logo concepts for Brightleaf", at(4, 16, 40)).to(&[PRIYA]).reply_to(&logos).text(
-        "Hi Priya,\n\nBoth are strong! I agree the leaf mark feels more like Brightleaf. Maybe try it with a slightly heavier wordmark?\n\nAlex",
-    );
+    let logos_re = M::new("logos-re", ME, "Re: Logo concepts for Brightleaf", at(4, 16, 40))
+        .to(&[PRIYA])
+        .reply_to(&logos)
+        .text("Hi Priya,\n\nBoth are strong! I agree the leaf mark feels more like Brightleaf. Maybe try it with a slightly heavier wordmark?\n\nAlex");
     put(store, sent, &logos_re, SEEN, None)?;
     let logos_final = M::new("logos-final", PRIYA, "Re: Logo concepts for Brightleaf", at(0, 9, 20))
         .reply_to(&logos_re)
@@ -555,15 +598,21 @@ On Monday, Marcus Chen wrote:\n> Could we do a kickoff call next Tuesday or Wedn
         "Hi everyone,\n\nThanks for a great evening! For next month I suggest either \"The Overstory\" or \"Piranesi\". Reply with your vote by Sunday.\n\nSofia",
     );
     put(store, inbox, &book, SEEN | flags::ANSWERED, None)?;
-    let book_re = M::new("bookclub-re", ME, "Re: Book club: next pick", at(11, 8, 30)).to(&[SOFIA]).cc(&[LENA, JONAS]).reply_to(&book).text(
-        "My vote goes to The Overstory — I just ordered it anyway.\n\nAlex",
-    );
+    let book_re = M::new("bookclub-re", ME, "Re: Book club: next pick", at(11, 8, 30))
+        .to(&[SOFIA])
+        .cc(&[LENA, JONAS])
+        .reply_to(&book)
+        .text("My vote goes to The Overstory — I just ordered it anyway.\n\nAlex");
     put(store, sent, &book_re, SEEN, None)?;
-    let book_lena = M::new("bookclub-lena", LENA, "Re: Book club: next pick", at(11, 12, 45)).to(&[SOFIA, ME, JONAS]).reply_to(&book_re).text("Piranesi for me, it's shorter and I'm busy this month! :)");
+    let book_lena = M::new("bookclub-lena", LENA, "Re: Book club: next pick", at(11, 12, 45))
+        .to(&[SOFIA, ME, JONAS])
+        .reply_to(&book_re)
+        .text("Piranesi for me, it's shorter and I'm busy this month! :)");
     put(store, inbox, &book_lena, SEEN, None)?;
-    let book_final = M::new("bookclub-final", SOFIA, "Re: Book club: next pick", at(7, 9, 10)).to(&[ME, LENA, JONAS]).reply_to(&book_lena).text(
-        "The votes are in: The Overstory wins 3 to 1. We meet on the 28th at my place, 7:30pm. I'll make soup!\n\nSofia",
-    );
+    let book_final = M::new("bookclub-final", SOFIA, "Re: Book club: next pick", at(7, 9, 10))
+        .to(&[ME, LENA, JONAS])
+        .reply_to(&book_lena)
+        .text("The votes are in: The Overstory wins 3 to 1. We meet on the 28th at my place, 7:30pm. I'll make soup!\n\nSofia");
     put(store, inbox, &book_final, SEEN, None)?;
 
     // --- Quarterly report with Hannah.
@@ -575,7 +624,10 @@ On Monday, Marcus Chen wrote:\n> Could we do a kickoff call next Tuesday or Wedn
         "Looks good! One suggestion: compare the mobile numbers with the same quarter last year, the seasonal effect is strong. I'll send the chart tomorrow.\n\nAlex",
     );
     put(store, sent, &report_re, SEEN, None)?;
-    let report2 = M::new("report-2", HANNAH, "Re: Quarterly report draft", at(3, 9, 40)).to(&[ME]).reply_to(&report_re).text("Great point, I added the year-over-year comparison. Thanks for the chart!\n\nHannah");
+    let report2 = M::new("report-2", HANNAH, "Re: Quarterly report draft", at(3, 9, 40))
+        .to(&[ME])
+        .reply_to(&report_re)
+        .text("Great point, I added the year-over-year comparison. Thanks for the chart!\n\nHannah");
     put(store, inbox, &report2, SEEN, None)?;
 
     // --- Neighbor: community garden.
@@ -583,11 +635,15 @@ On Monday, Marcus Chen wrote:\n> Could we do a kickoff call next Tuesday or Wedn
         "Hello Alex,\n\nThe garden committee asked me to let you know that plot 14 is available from next spring if you are still interested. The yearly fee is 40 euros.\n\nBest wishes,\nRuth Lindqvist",
     );
     put(store, inbox, &garden, SEEN | flags::ANSWERED, None)?;
-    let garden_re = M::new("garden-re", ME, "Re: Community garden: plot 14", at(10, 19, 2)).to(&[RUTH]).reply_to(&garden).text("Hi Ruth,\n\nYes, I'd love to take it! How do I pay the fee?\n\nAlex");
+    let garden_re = M::new("garden-re", ME, "Re: Community garden: plot 14", at(10, 19, 2))
+        .to(&[RUTH])
+        .reply_to(&garden)
+        .text("Hi Ruth,\n\nYes, I'd love to take it! How do I pay the fee?\n\nAlex");
     put(store, sent, &garden_re, SEEN, None)?;
-    let garden2 = M::new("garden-2", RUTH, "Re: Community garden: plot 14", at(0, 7, 55)).to(&[ME]).reply_to(&garden_re).text(
-        "Wonderful! You can pay at the next members' meeting on Thursday at 6pm in the shed, or by bank transfer. I'll bring the key.\n\nRuth",
-    );
+    let garden2 = M::new("garden-2", RUTH, "Re: Community garden: plot 14", at(0, 7, 55))
+        .to(&[ME])
+        .reply_to(&garden_re)
+        .text("Wonderful! You can pay at the next members' meeting on Thursday at 6pm in the shed, or by bank transfer. I'll bring the key.\n\nRuth");
     put(store, inbox, &garden2, UNREAD, None)?;
     Ok(())
 }
@@ -730,14 +786,13 @@ fn singles(store: &Store, b: &Boxes) -> Result<()> {
         ));
     put(store, inbox, &stories, SEEN, None)?;
 
-    let climbing = M::new("climbing", JONAS, "Climbing gym on Thursday?", at(14, 12, 30)).text(
-        "Hi Alex,\n\nThe new bouldering wall opened at the climbing gym. Want to try it on Thursday after work, around 18:30?\n\nJonas",
-    );
+    let climbing = M::new("climbing", JONAS, "Climbing gym on Thursday?", at(14, 12, 30))
+        .text("Hi Alex,\n\nThe new bouldering wall opened at the climbing gym. Want to try it on Thursday after work, around 18:30?\n\nJonas");
     put(store, inbox, &climbing, SEEN, None)?;
 
-    let carpool = M::new("carpool", SOFIA, "Carpool to book club", at(3, 18, 20)).to(&[ME, LENA]).text(
-        "Hi you two,\n\nI can pick you up on the way to book club if you like — I'll pass the station at about 7:10pm. Just let me know!\n\nSofia",
-    );
+    let carpool = M::new("carpool", SOFIA, "Carpool to book club", at(3, 18, 20))
+        .to(&[ME, LENA])
+        .text("Hi you two,\n\nI can pick you up on the way to book club if you like — I'll pass the station at about 7:10pm. Just let me know!\n\nSofia");
     put(store, inbox, &carpool, SEEN, None)?;
 
     let library_news = M::new("library-news", LIBRARY, "This month at the City Library", at(18, 10, 0))
@@ -750,15 +805,21 @@ fn singles(store: &Store, b: &Boxes) -> Result<()> {
 
 fn other_mailboxes(store: &Store, b: &Boxes) -> Result<()> {
     // Drafts
-    let draft = M::new("draft-offsite", ME, "Re: Team offsite: pick a date", at(0, 10, 30)).to(&[HANNAH]).text("Hi Hannah,\n\nFriday the 14th works best for me, Monday I'm at a workshop until 3pm.\n\n");
+    let draft = M::new("draft-offsite", ME, "Re: Team offsite: pick a date", at(0, 10, 30))
+        .to(&[HANNAH])
+        .text("Hi Hannah,\n\nFriday the 14th works best for me, Monday I'm at a workshop until 3pm.\n\n");
     put(store, b.drafts.id, &draft, SEEN | flags::DRAFT, None)?;
-    let packing = M::new("draft-packing", ME, "Packing list for the coast trip", at(1, 21, 0)).to(&[JONAS]).text("- rain jacket\n- headlamp\n- sandwiches\n- train tickets (printed!)\n- ");
+    let packing = M::new("draft-packing", ME, "Packing list for the coast trip", at(1, 21, 0))
+        .to(&[JONAS])
+        .text("- rain jacket\n- headlamp\n- sandwiches\n- train tickets (printed!)\n- ");
     put(store, b.drafts.id, &packing, SEEN | flags::DRAFT, None)?;
 
     // Archive (older mail)
-    let welcome = M::new("welcome", SOFIA, "Welcome to the book club!", at(45, 18, 0)).text("Hi Alex,\n\nSo glad you're joining us. We meet once a month, usually at my place. First book: \"Station Eleven\".\n\nSofia");
+    let welcome = M::new("welcome", SOFIA, "Welcome to the book club!", at(45, 18, 0))
+        .text("Hi Alex,\n\nSo glad you're joining us. We meet once a month, usually at my place. First book: \"Station Eleven\".\n\nSofia");
     put(store, b.archive.id, &welcome, SEEN, None)?;
-    let tax = M::new("tax", LENA, "Tax documents from Dad", at(38, 12, 10)).text("Dad asked me to forward these to you. He says thanks for helping with the forms!\n\nLena");
+    let tax = M::new("tax", LENA, "Tax documents from Dad", at(38, 12, 10))
+        .text("Dad asked me to forward these to you. He says thanks for helping with the forms!\n\nLena");
     put(store, b.archive.id, &tax, SEEN, None)?;
     let old_osw = M::new("osw-208", OSW, "Open Source Weekly #208", at(30, 6, 30))
         .header("List-Id", "Open Source Weekly <weekly.opensourceweekly.example>")
@@ -767,13 +828,16 @@ fn other_mailboxes(store: &Store, b: &Boxes) -> Result<()> {
     put(store, b.archive.id, &old_osw, SEEN, None)?;
 
     // Custom mailboxes
-    let proj = M::new("projects-overview", HANNAH, "Projects overview for Q4", at(17, 9, 0)).text("Hi Alex,\n\nHere's the list of projects for Q4: website relaunch, newsletter redesign and the photo shoot in November.\n\nHannah");
+    let proj = M::new("projects-overview", HANNAH, "Projects overview for Q4", at(17, 9, 0))
+        .text("Hi Alex,\n\nHere's the list of projects for Q4: website relaunch, newsletter redesign and the photo shoot in November.\n\nHannah");
     put(store, b.projects, &proj, SEEN, None)?;
-    let photo = M::new("photo-shoot", MARCUS, "Photo shoot in November", at(16, 14, 30)).text("Hi Alex,\n\nWe booked the photographer for the 12th of November. Could you prepare a shot list for the product pages?\n\nMarcus");
+    let photo = M::new("photo-shoot", MARCUS, "Photo shoot in November", at(16, 14, 30))
+        .text("Hi Alex,\n\nWe booked the photographer for the 12th of November. Could you prepare a shot list for the product pages?\n\nMarcus");
     put(store, b.projects, &photo, SEEN, None)?;
     let old_energy = M::new("energy-aug", ENERGY, "Your invoice for August", at(43, 8, 0)).text("Your invoice for August is ready. Amount due: €61.20.");
     put(store, b.receipts, &old_energy, SEEN, None)?;
-    let old_books = M::new("receipt-old", CORNER_BOOKS, "Your Corner Books receipt for order CB-47120", at(40, 15, 0)).text("Thanks for your order! Station Eleven (paperback) — €11.00. Total: €11.00.");
+    let old_books = M::new("receipt-old", CORNER_BOOKS, "Your Corner Books receipt for order CB-47120", at(40, 15, 0))
+        .text("Thanks for your order! Station Eleven (paperback) — €11.00. Total: €11.00.");
     put(store, b.receipts, &old_books, SEEN, None)?;
 
     // Junk
@@ -786,7 +850,9 @@ fn other_mailboxes(store: &Store, b: &Boxes) -> Result<()> {
     put(store, b.junk.id, &spam2, UNREAD | flags::JUNK, None)?;
 
     // Trash
-    let old_promo = M::new("trash-promo", TRAILHEAD, "Summer clearance: up to 60% off", at(20, 7, 0)).header("List-Unsubscribe", "<https://trailhead-outdoor.example/u/8823>").text("Summer clearance sale: up to 60% off tents and sleeping bags. Shop now!");
+    let old_promo = M::new("trash-promo", TRAILHEAD, "Summer clearance: up to 60% off", at(20, 7, 0))
+        .header("List-Unsubscribe", "<https://trailhead-outdoor.example/u/8823>")
+        .text("Summer clearance sale: up to 60% off tents and sleeping bags. Shop now!");
     put(store, b.trash.id, &old_promo, SEEN, None)?;
     Ok(())
 }

@@ -39,7 +39,8 @@ const WEEKDAYS: &str = r"monday|tuesday|wednesday|thursday|friday|saturday|sunda
 const TIME: &str = r"(?:(?P<h1>\d{1,2}):(?P<m1>\d{2})(?:\s*(?P<ap1>a\.m\.|p\.m\.|am|pm|uhr|h)\b)?|(?P<h2>\d{1,2})(?:\.(?P<m2>\d{2}))?\s*(?P<ap2>a\.m\.|p\.m\.|am|pm|uhr)(?:\b|$)|(?P<word>noon|midnight|mittag|mitternacht)\b)";
 
 static URL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?i)\b(?:(?:https?|ftp)://|www\.)[^\s<>"'\[\]{}|\\^`]+|\bmailto:[^\s<>"'()\[\]]+"#).unwrap());
-static EMAIL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b[a-z0-9][a-z0-9._%+\-]*@[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)*\.[a-z]{2,}\b").unwrap());
+static EMAIL_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\b[a-z0-9][a-z0-9._%+\-]*@[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)*\.[a-z]{2,}\b").unwrap());
 static PHONE_INTL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?:\+|\b00)[1-9]\d{0,2}(?:[ .\-/]?\(0\))?(?:[ .\-/]?\(?\d{1,5}\)?){1,6}").unwrap());
 static PHONE_NATIONAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?:\(0\d{1,5}\)|\b0\d{1,5})(?:[ .\-/]?\d{2,8}){1,4}").unwrap());
 static PHONE_US: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?:\([2-9]\d{2}\)\s?|\b[2-9]\d{2}[ .\-])\d{3}[ .\-]\d{4}\b").unwrap());
@@ -49,12 +50,12 @@ static DOTTED_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(\d{1,2})\.(\d{1,2})
 static SLASH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(\d{1,2})/(\d{1,2})(?:/(\d{4}|\d{2}))?\b").unwrap());
 static DAY_MONTH_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(&format!(r"(?i)\b(\d{{1,2}})(?:st|nd|rd|th|\.)?(?:\s+of)?\s+({MONTHS})\b\.?(?:,?\s+(\d{{4}}))?")).unwrap());
-static MONTH_DAY_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(&format!(r"(?i)\b({MONTHS})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?\b(?:,?\s+(\d{{4}}))?")).unwrap());
+static MONTH_DAY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(&format!(r"(?i)\b({MONTHS})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?\b(?:,?\s+(\d{{4}}))?")).unwrap());
 static RELATIVE_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)\b(the day after tomorrow|day after tomorrow|übermorgen|tomorrow|today|tonight|this evening|this morning|this afternoon|yesterday|heute abend|heute|morgen früh|morgen|gestern|next week|nächste woche)\b").unwrap()
 });
-static WEEKDAY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(&format!(r"(?i)\b(?:(next|this|coming|on|nächsten|nächster|kommenden|diesen|am)\s+)?({WEEKDAYS})\b")).unwrap());
+static WEEKDAY_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(&format!(r"(?i)\b(?:(next|this|coming|on|nächsten|nächster|kommenden|diesen|am)\s+)?({WEEKDAYS})\b")).unwrap());
 static TIME_RE: Lazy<Regex> = Lazy::new(|| Regex::new(&format!(r"(?i)\b{TIME}")).unwrap());
 static TIME_SUFFIX_RE: Lazy<Regex> = Lazy::new(|| Regex::new(&format!(r"(?i)^,?\s*(?:at|um|@|,|from|von|ab|-|–)?\s*{TIME}")).unwrap());
 
