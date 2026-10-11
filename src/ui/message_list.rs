@@ -393,7 +393,6 @@ impl PurpamailApp {
         let cols = s.viewing.classic_columns.clone();
         let rows = self.rows.clone();
         let my_addrs = s.my_addresses();
-        let focused = self.list_has_focus;
         let mut tb = TableBuilder::new(ui).striped(false).resizable(true).sense(Sense::click_and_drag()).cell_layout(egui::Layout::left_to_right(egui::Align::Center)).min_scrolled_height(0.0);
         for c in &cols {
             tb = match c.as_str() {
@@ -457,14 +456,13 @@ impl PurpamailApp {
                 let unread = if row.thread_count > 1 && !row.is_child { row.thread_unread } else { m.is_unread() };
                 let txt = |t: String| {
                     let r = RichText::new(t).size(s.fonts.list_font_size);
-                    let r = if unread && s.viewing.display_unread_bold { r.family(fonts::list_bold()) } else { r.family(fonts::list()) };
-                    if selected && focused { r.color(pal.selection_text) } else { r }
+                    if unread && s.viewing.display_unread_bold { r.family(fonts::list_bold()) } else { r.family(fonts::list()) }
                 };
                 for c in &cols {
                     trow.col(|ui| match c.as_str() {
                         "unread" => {
                             if unread {
-                                widgets::unread_dot(ui, if selected && focused { pal.selection_text } else { pal.unread_dot }, 14.0);
+                                widgets::unread_dot(ui, pal.unread_dot, 14.0);
                             } else if m.has(flags::ANSWERED) {
                                 ui.label(RichText::new(ic::ARROW_BEND_UP_LEFT).small().color(pal.text_tertiary));
                             }

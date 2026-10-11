@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=Purpamail
+GenericName=Mail Client
+Comment=Read, organize and send email
+Exec=purpamail %U
+Icon=org.purpamail.Purpamail
+Terminal=false
+Categories=Network;Email;Office;
+Keywords=email;mail;imap;smtp;pop3;inbox;
+MimeType=x-scheme-handler/mailto;message/rfc822;application/mbox;
+StartupNotify=true
+StartupWMClass=org.purpamail.Purpamail
+Actions=compose;
+
+[Desktop Action compose]
+Name=New Message
+Exec=purpamail mailto:

@@ -152,6 +152,8 @@ pub struct PurpamailApp {
     pub undo: Vec<UndoEntry>,
     pub pending_send: Option<PendingSend>,
     pub log: Vec<String>,
+    pub last_updated: Option<i64>,
+    ipc_rx: crossbeam_channel::Receiver<String>,
 
     fonts_applied: crate::core::config::FontsColorsPrefs,
     theme_applied: Option<(crate::core::config::Theme, f32)>,
@@ -170,6 +172,9 @@ impl PurpamailApp {
         let s = settings.read().clone();
         super::fonts::install(&cc.egui_ctx, &s.fonts);
         super::theme::apply(&cc.egui_ctx, s.viewing.theme, s.viewing.ui_scale);
+        let (ipc_tx, ipc_rx) = crossbeam_channel::unbounded();
+        let wake = cc.egui_ctx.clone();
+        crate::ipc::listen(ipc_tx, move || wake.request_repaint());
         let sel = store.kv_get("ui:sidebar_sel").and_then(|v| serde_json::from_str(&v).ok()).unwrap_or(SidebarSel::AllRole(MailboxRole::Inbox));
         let mut app = Self {
             store,
@@ -220,6 +225,8 @@ impl PurpamailApp {
             undo: vec![],
             pending_send: None,
             log: vec![],
+            last_updated: None,
+            ipc_rx,
             fonts_applied: s.fonts.clone(),
             theme_applied: Some((s.viewing.theme, s.viewing.ui_scale)),
             last_reminder_check: 0.0,
@@ -234,6 +241,53 @@ impl PurpamailApp {
         let _ = app.store.ensure_mailbox(LOCAL_ACCOUNT, "Inbox", MailboxRole::Inbox);
         app.engine.send(Command::CheckMail(None));
         app
+    }
+
+    /// Handle a request from the command line or another Purpamail invocation.
+    pub fn handle_request(&mut self, r: &str) {
+        if r.starts_with("mailto:") {
+            self.actions.push(Action::Compose(ComposeInit::Mailto(r.to_string())));
+        } else if let Some(path) = r.strip_prefix("open:") {
+            if let Ok(raw) = std::fs::read(path) {
+                if let Ok(mb) = self.store.ensure_mailbox(LOCAL_ACCOUNT, "Opened Messages", MailboxRole::Custom) {
+                    if let Ok(ids) = ops::import_raw(&self.store, mb, &[raw]) {
+                        for id in ids {
+                            self.actions.push(Action::OpenMessageWindow(id));
+                        }
+                    }
+                }
+                self.list_dirty = true;
+            }
+        }
+    }
+
+    /// Files dropped on the main window: messages are opened, mailboxes imported.
+    fn handle_dropped_files(&mut self, ctx: &egui::Context) {
+        let files: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
+        if files.is_empty() {
+            return;
+        }
+        let mut imported = 0;
+        for f in files {
+            let ext = f.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            match ext.as_str() {
+                "eml" | "msg" => self.handle_request(&format!("open:{}", f.display())),
+                "mbox" | "mbx" | "" => {
+                    let raws = if f.is_dir() { crate::core::mbox::import_mailbox_tree(&f).into_iter().flat_map(|(_, r)| r).collect() } else { crate::core::mbox::import(&f).unwrap_or_default() };
+                    let name = f.file_stem().and_then(|s| s.to_str()).unwrap_or("Imported").to_string();
+                    if let Ok(mb) = self.store.ensure_mailbox(LOCAL_ACCOUNT, &format!("Import/{name}"), MailboxRole::Custom) {
+                        imported += ops::import_raw(&self.store, mb, &raws).map(|v| v.len()).unwrap_or(0);
+                    }
+                    let _ = self.store.ensure_mailbox(LOCAL_ACCOUNT, "Import", MailboxRole::Custom);
+                    self.fix_local_parents();
+                }
+                _ => {}
+            }
+        }
+        if imported > 0 {
+            self.toast(ctx, format!("Imported {imported} messages"));
+        }
+        self.list_dirty = true;
     }
 
     pub fn next_id(&mut self) -> u64 {
@@ -573,6 +627,7 @@ impl PurpamailApp {
                 }
                 Event::MessagesChanged(_) => {
                     self.list_dirty = true;
+                    self.last_updated = Some(now_ts());
                 }
                 Event::NewMail { account, messages } => {
                     self.list_dirty = true;
@@ -587,6 +642,9 @@ impl PurpamailApp {
                 }
                 Event::BodyFetchFailed(_, e) => self.toast(ctx, format!("Could not download message: {e}")),
                 Event::AccountStatus { account, online, error } => {
+                    if online && error.is_none() {
+                        self.last_updated = Some(now_ts());
+                    }
                     self.account_status.insert(account, (online, error));
                 }
                 Event::SendSucceeded { .. } => {
@@ -1762,7 +1820,14 @@ impl eframe::App for PurpamailApp {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.handle_events(&ctx);
+        while let Ok(r) = self.ipc_rx.try_recv() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            if r != "focus" {
+                self.handle_request(&r);
+            }
+        }
         self.check_reminders(&ctx);
+        self.handle_dropped_files(&ctx);
         self.shortcuts(&ctx);
         if self.list_dirty {
             self.refresh_list();
@@ -1926,10 +1991,13 @@ impl PurpamailApp {
                         if ui.add(egui::Label::new(RichText::new(format!("{} {acct}: {e}", ic::WARNING)).color(pal.danger).size(12.0)).sense(egui::Sense::click())).clicked() {
                             self.actions.push(Action::ShowConnectionDoctor);
                         }
-                    } else {
-                        let n = self.rows.len();
-                        let unread = self.rows.iter().filter(|r| r.thread_unread).count();
-                        ui.label(RichText::new(format!("{n} {} · {unread} unread", if n == 1 { "message" } else { "messages" })).color(pal.text_tertiary).size(12.0));
+                    } else if let Some(t) = self.last_updated {
+                        let when = if now_ts() - t < 60 { "Updated just now".to_string() } else { format!("Updated {}", widgets::format_list_date(t)) };
+                        ui.label(RichText::new(when).color(pal.text_tertiary).size(12.0));
+                    } else if self.settings.read().accounts.is_empty() {
+                        if ui.link(RichText::new(format!("{} Add an account to get started", ic::PLUS_CIRCLE)).size(12.0)).clicked() {
+                            self.actions.push(Action::AddAccount);
+                        }
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let ops = self.store.pending_op_count();

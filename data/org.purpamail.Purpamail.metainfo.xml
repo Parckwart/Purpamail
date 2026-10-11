@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.purpamail.Purpamail</id>
+  <name>Purpamail</name>
+  <summary>A fast, full-featured mail client</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>Purpamail is a desktop mail client with conversations, smart mailboxes,
+    VIPs, flags, rules, junk filtering, categories, reminders, scheduled sending,
+    undo send, rich text composing, signatures and templates. It works with any
+    IMAP, POP3 and SMTP provider.</p>
+  </description>
+  <launchable type="desktop-id">org.purpamail.Purpamail.desktop</launchable>
+  <categories>
+    <category>Network</category>
+    <category>Email</category>
+  </categories>
+  <provides>
+    <binary>purpamail</binary>
+  </provides>
+</component>
