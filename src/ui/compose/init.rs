@@ -4,7 +4,7 @@ use crate::core::compose::{self, OutgoingAttachment, OutgoingMessage, ReplyKind}
 use crate::core::config::{ComposingPrefs, MessageFormat, Settings};
 use crate::core::mime::{self, ParsedMessage, escape_html};
 use crate::core::model::{Address, Priority};
-use crate::ui::richtext::{self, ParaAttr, RichDoc, Rgb, Style};
+use crate::ui::richtext::{self, ParaAttr, Rgb, RichDoc, Style};
 
 /// Where a newly chosen signature goes when the body has none yet.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -59,9 +59,19 @@ fn literal(text: &str) -> RichDoc {
 /// The original message body as a document.
 fn original_body(orig: &ParsedMessage, rich: bool) -> RichDoc {
     match (&orig.html, rich) {
-        (Some(h), true) => richtext::from_html_lite(h),
-        _ => richtext::from_plain(orig.plain_text().trim_end()),
+        (Some(h), true) => trim_leading_empty(richtext::from_html_lite(h)),
+        _ => richtext::from_plain(orig.plain_text().trim()),
     }
+}
+
+/// Remove empty paragraphs at the start of a document.
+fn trim_leading_empty(mut d: RichDoc) -> RichDoc {
+    while d.text().starts_with('\n') {
+        let next = d.paras()[1];
+        d.delete(0, 1);
+        d.set_para(0, next);
+    }
+    d
 }
 
 /// Increase the quote level of every paragraph by one.
@@ -73,14 +83,16 @@ fn quoted(mut d: RichDoc) -> RichDoc {
 
 /// Inline images of the original that the document references.
 fn referenced_images(orig: &ParsedMessage, doc: &RichDoc) -> Vec<(String, Vec<u8>)> {
-    doc.image_ids()
-        .into_iter()
-        .filter_map(|cid| orig.find_cid(&cid).map(|a| (cid.clone(), a.data.clone())))
-        .collect()
+    doc.image_ids().into_iter().filter_map(|cid| orig.find_cid(&cid).map(|a| (cid.clone(), a.data.clone()))).collect()
 }
 
 fn to_outgoing(a: &mime::Attachment) -> OutgoingAttachment {
-    OutgoingAttachment { filename: if a.filename.is_empty() { "attachment".into() } else { a.filename.clone() }, mime_type: a.mime_type.clone(), data: a.data.clone(), content_id: None }
+    OutgoingAttachment {
+        filename: if a.filename.is_empty() { "attachment".into() } else { a.filename.clone() },
+        mime_type: a.mime_type.clone(),
+        data: a.data.clone(),
+        content_id: None,
+    }
 }
 
 /// A file name for a forwarded message.
@@ -93,7 +105,12 @@ pub fn eml_name(subject: &str) -> String {
 /// Attach a raw message as `message/rfc822`.
 pub fn message_attachment(raw: &[u8]) -> OutgoingAttachment {
     let subject = mime::parse(raw).map(|p| p.subject).unwrap_or_default();
-    OutgoingAttachment { filename: eml_name(&subject), mime_type: "message/rfc822".into(), data: raw.to_vec(), content_id: None }
+    OutgoingAttachment {
+        filename: eml_name(&subject),
+        mime_type: "message/rfc822".into(),
+        data: raw.to_vec(),
+        content_id: None,
+    }
 }
 
 /// The account that received `orig`: the first of the user's addresses among
@@ -118,7 +135,10 @@ pub fn receiving_address(orig: &ParsedMessage, settings: &Settings) -> Option<(S
 pub fn respond(orig: &ParsedMessage, raw: &[u8], kind: ReplyKind, selected_text: Option<&str>, settings: &Settings, message_account: Option<&str>) -> Prefill {
     let prefs: &ComposingPrefs = &settings.composing;
     let my = settings.my_addresses();
-    let mut p = Prefill { priority: Priority::Normal, ..Default::default() };
+    let mut p = Prefill {
+        priority: Priority::Normal,
+        ..Default::default()
+    };
     if let Some((acct, email)) = receiving_address(orig, settings) {
         p.account_id = Some(acct);
         p.from_email = Some(email);
@@ -166,16 +186,16 @@ pub fn respond(orig: &ParsedMessage, raw: &[u8], kind: ReplyKind, selected_text:
                 p.references.push(orig.message_id.clone());
             }
             p.plain = !rich;
-            let mut body = RichDoc::plain("\n");
+            let mut body = RichDoc::plain("\n\n");
             if rich {
                 let inner = match &orig.html {
                     Some(h) => h.clone(),
                     None => escape_html(&orig.plain_text()).replace('\n', "<br>"),
                 };
-                let fwd = richtext::from_html_lite(&format!("{}{}</blockquote>", compose::forward_header_html(orig), inner));
-                body.append(&fwd, true);
+                let fwd = trim_leading_empty(richtext::from_html_lite(&format!("{}{}</blockquote>", compose::forward_header_html(orig), inner)));
+                body.append(&fwd, false);
             } else {
-                body.append(&literal(&format!("\n{}\n{}", compose::forward_header(orig), orig.plain_text().trim_end())), false);
+                body.append(&literal(&format!("{}\n{}", compose::forward_header(orig), orig.plain_text().trim_end())), false);
             }
             p.inline_images = referenced_images(orig, &body);
             p.body = body;
@@ -199,7 +219,9 @@ pub fn respond(orig: &ParsedMessage, raw: &[u8], kind: ReplyKind, selected_text:
             p.inline_images = referenced_images(orig, &p.body);
             p.plain = orig.html.is_none();
             p.redirect_raw = Some(raw.to_vec());
-            p.from_email = p.from_email.or_else(|| p.account_id.as_deref().and_then(|a| settings.account(a)).map(|a| a.primary_email().to_string()));
+            p.from_email = p
+                .from_email
+                .or_else(|| p.account_id.as_deref().and_then(|a| settings.account(a)).map(|a| a.primary_email().to_string()));
             return p;
         }
         ReplyKind::SendAgain | ReplyKind::EditDraft => {
@@ -307,7 +329,13 @@ pub fn mentions_attachment(doc: &RichDoc) -> bool {
         if doc.paras()[i].quote > 0 {
             continue;
         }
-        let text: String = doc.slice(r.clone()).chars().enumerate().filter(|(ci, _)| !doc.style_at(r.start + ci).signature).map(|(_, c)| c).collect();
+        let text: String = doc
+            .slice(r.clone())
+            .chars()
+            .enumerate()
+            .filter(|(ci, _)| !doc.style_at(r.start + ci).signature)
+            .map(|(_, c)| c)
+            .collect();
         let lower = text.to_lowercase();
         if lower.split(|c: char| !c.is_alphanumeric()).any(|w| ATTACHMENT_WORDS.contains(&w)) {
             return true;
@@ -351,8 +379,18 @@ mod tests {
 
     fn settings() -> Settings {
         let mut s = Settings::default();
-        s.accounts.push(AccountConfig { id: "work".into(), full_name: "Me".into(), emails: vec!["me@work.com".into(), "alias@work.com".into()], ..Default::default() });
-        s.accounts.push(AccountConfig { id: "home".into(), full_name: "Me".into(), emails: vec!["me@home.org".into()], ..Default::default() });
+        s.accounts.push(AccountConfig {
+            id: "work".into(),
+            full_name: "Me".into(),
+            emails: vec!["me@work.com".into(), "alias@work.com".into()],
+            ..Default::default()
+        });
+        s.accounts.push(AccountConfig {
+            id: "home".into(),
+            full_name: "Me".into(),
+            emails: vec!["me@home.org".into()],
+            ..Default::default()
+        });
         s
     }
 
@@ -367,7 +405,13 @@ mod tests {
             date: 1_700_000_000,
             text: Some("Hello there\n> older quote\nBye".into()),
             html: html.then(|| "<p>Hello <b>there</b></p><ul><li>pizza</li></ul>".to_string()),
-            attachments: vec![mime::Attachment { filename: "menu.pdf".into(), mime_type: "application/pdf".into(), content_id: None, inline: false, data: vec![1, 2, 3] }],
+            attachments: vec![mime::Attachment {
+                filename: "menu.pdf".into(),
+                mime_type: "application/pdf".into(),
+                content_id: None,
+                inline: false,
+                data: vec![1, 2, 3],
+            }],
             ..Default::default()
         }
     }
@@ -440,7 +484,13 @@ mod tests {
         let p = respond(&orig(true), b"raw", ReplyKind::Forward, None, &s, None);
         assert!(p.body.text().contains("Begin forwarded message:"));
         assert!(p.body.paras().iter().any(|a| a.quote == 1));
-        let raw = OutgoingMessage { subject: "A/B".into(), from: Address::new("", "a@b.c"), text: "x".into(), ..Default::default() }.to_mime(false);
+        let raw = OutgoingMessage {
+            subject: "A/B".into(),
+            from: Address::new("", "a@b.c"),
+            text: "x".into(),
+            ..Default::default()
+        }
+        .to_mime(false);
         let p = respond(&mime::parse(&raw).unwrap(), &raw, ReplyKind::ForwardAsAttachment, None, &s, None);
         assert_eq!(p.attachments[0].mime_type, "message/rfc822");
         assert_eq!(p.attachments[0].filename, "A_B.eml");
@@ -484,7 +534,12 @@ mod tests {
             subject: "S".into(),
             text: "body".into(),
             html: Some("<div><b>body</b></div>".into()),
-            attachments: vec![OutgoingAttachment { filename: "i.png".into(), mime_type: "image/png".into(), data: vec![9], content_id: Some("img1".into()) }],
+            attachments: vec![OutgoingAttachment {
+                filename: "i.png".into(),
+                mime_type: "image/png".into(),
+                data: vec![9],
+                content_id: Some("img1".into()),
+            }],
             message_id: "m1@work.com".into(),
             ..Default::default()
         };

@@ -171,7 +171,11 @@ pub fn to_html_fragment(doc: &RichDoc) -> String {
             }
             kind => {
                 if list != kind {
-                    out.push_str(if kind == ListKind::Bullet { "<ul style=\"margin:0;padding-left:1.6em\">" } else { "<ol style=\"margin:0;padding-left:1.6em\">" });
+                    out.push_str(if kind == ListKind::Bullet {
+                        "<ul style=\"margin:0;padding-left:1.6em\">"
+                    } else {
+                        "<ol style=\"margin:0;padding-left:1.6em\">"
+                    });
                     list = kind;
                 }
                 let _ = write!(out, "<li{style_attr}>{content}</li>");
@@ -187,8 +191,14 @@ pub fn to_html_fragment(doc: &RichDoc) -> String {
 }
 
 /// A complete HTML document for an email body.
-pub fn to_html_document(doc: &RichDoc, font_px: f32, background: Option<Rgb>) -> String {
-    let mut body_css = format!("font-family:sans-serif;font-size:{}px;line-height:1.4;", font_px.round());
+///
+/// `font_family` is the preferred message font (a generic fallback is added).
+pub fn to_html_document(doc: &RichDoc, font_family: Option<&str>, font_px: f32, background: Option<Rgb>) -> String {
+    let family = match font_family.map(str::trim).filter(|f| !f.is_empty()) {
+        Some(f) => format!("'{}', sans-serif", f.replace(['\'', '"', ';', '<', '>'], "")),
+        None => "sans-serif".to_string(),
+    };
+    let mut body_css = format!("font-family:{family};font-size:{}px;line-height:1.4;", font_px.round());
     if let Some(bg) = background {
         let _ = write!(body_css, "background-color:{};", rgb_hex(bg));
     }
@@ -314,7 +324,14 @@ struct Builder {
 
 impl Builder {
     fn new() -> Self {
-        Builder { text: String::new(), runs: Vec::new(), paras: vec![ParaAttr::default()], para_empty: true, pending_space: None, blank_pending: false }
+        Builder {
+            text: String::new(),
+            runs: Vec::new(),
+            paras: vec![ParaAttr::default()],
+            para_empty: true,
+            pending_space: None,
+            blank_pending: false,
+        }
     }
 
     fn push_raw(&mut self, c: char, st: &Style) {
@@ -336,7 +353,10 @@ impl Builder {
     fn start_content(&mut self, ctx: ParaAttr) {
         if self.para_empty {
             if self.blank_pending && !self.text.is_empty() {
-                *self.paras.last_mut().unwrap() = ParaAttr { quote: ctx.quote, ..Default::default() };
+                *self.paras.last_mut().unwrap() = ParaAttr {
+                    quote: ctx.quote,
+                    ..Default::default()
+                };
                 self.newline(ctx);
             }
             self.blank_pending = false;
@@ -513,7 +533,10 @@ fn walk(b: &mut Builder, node: ElementRef<'_>, st: &Style, ctx: ParaAttr, pre: b
                 "img" => {
                     if let Some(cid) = e.attr("src").and_then(|s| s.strip_prefix("cid:")) {
                         b.start_content(ctx);
-                        let ist = Style { image: Some(cid.to_string()), ..Default::default() };
+                        let ist = Style {
+                            image: Some(cid.to_string()),
+                            ..Default::default()
+                        };
                         b.push_raw(OBJ, &ist);
                     }
                     return;
@@ -597,7 +620,8 @@ fn walk(b: &mut Builder, node: ElementRef<'_>, st: &Style, ctx: ParaAttr, pre: b
                     block = true;
                     ctx.align = Align::Center;
                 }
-                "div" | "table" | "tr" | "section" | "article" | "header" | "footer" | "address" | "dd" | "dt" | "dl" | "figure" | "figcaption" | "main" | "nav" | "aside" | "tbody" | "thead" | "tfoot" | "caption" => {
+                "div" | "table" | "tr" | "section" | "article" | "header" | "footer" | "address" | "dd" | "dt" | "dl" | "figure" | "figcaption" | "main" | "nav" | "aside" | "tbody" | "thead"
+                | "tfoot" | "caption" => {
                     block = true;
                 }
                 _ => {}
@@ -616,10 +640,8 @@ fn walk(b: &mut Builder, node: ElementRef<'_>, st: &Style, ctx: ParaAttr, pre: b
                 b.block_break(ctx);
             }
             walk_children(b, node, &st, ctx, pre, list);
-            if name == "td" || name == "th" {
-                if !b.para_empty && b.pending_space.is_none() {
-                    b.pending_space = Some(Style::default());
-                }
+            if (name == "td" || name == "th") && !b.para_empty && b.pending_space.is_none() {
+                b.pending_space = Some(Style::default());
             }
             if block {
                 b.block_break(ctx);
@@ -674,8 +696,8 @@ mod tests {
         assert!(h.contains("<ul style=\"margin:0;padding-left:1.6em\"><li>one</li><li>two</li></ul>"), "{h}");
         assert!(h.contains("<blockquote type=\"cite\""));
         assert!(h.contains("<div>quoted</div><div><br></div></blockquote><div>end</div>"), "{h}");
-        let doc = to_html_document(&d, 14.0, Some([255, 244, 230]));
-        assert!(doc.starts_with("<!DOCTYPE html>") && doc.contains("background-color:#fff4e6"));
+        let doc = to_html_document(&d, Some("Inter"), 14.0, Some([255, 244, 230]));
+        assert!(doc.starts_with("<!DOCTYPE html>") && doc.contains("background-color:#fff4e6") && doc.contains("font-family:'Inter', sans-serif"));
     }
 
     #[test]
@@ -742,10 +764,15 @@ mod tests {
         d.toggle_list(39, 39, ListKind::Numbered);
         d.indent(44, 44, 1);
         d.update_paras(57, 57, |p| p.align = Align::Center);
-        let back = from_html_lite(&to_html_document(&d, 14.0, None));
+        let back = from_html_lite(&to_html_document(&d, None, 14.0, None));
         assert_eq!(back.text(), d.text());
         assert_eq!(back.paras(), d.paras());
-        let strip = |doc: &RichDoc| doc.spans().map(|(r, s)| (doc.slice(r).to_string(), s.clone())).filter(|(t, _)| !t.trim().is_empty()).collect::<Vec<_>>();
+        let strip = |doc: &RichDoc| {
+            doc.spans()
+                .map(|(r, s)| (doc.slice(r).to_string(), s.clone()))
+                .filter(|(t, _)| !t.trim().is_empty())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(strip(&back), strip(&d));
     }
 

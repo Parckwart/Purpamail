@@ -84,7 +84,16 @@ pub struct TokenField {
 
 impl TokenField {
     pub fn new(id: Id, tokens: Vec<Address>) -> Self {
-        TokenField { tokens, input: String::new(), id, suggestions: Vec::new(), highlighted: 0, query: String::new(), selected_chip: None, focus_input: false }
+        TokenField {
+            tokens,
+            input: String::new(),
+            id,
+            suggestions: Vec::new(),
+            highlighted: 0,
+            query: String::new(),
+            selected_chip: None,
+            focus_input: false,
+        }
     }
 
     /// All addresses including a not yet committed typed one.
@@ -183,7 +192,10 @@ impl TokenField {
                 } else if !valid {
                     (pal.danger.gamma_multiply(if pal.dark { 0.35 } else { 0.14 }), pal.danger)
                 } else if marked {
-                    (Color32::from_rgb(0xe8, 0x59, 0x0c).gamma_multiply(if pal.dark { 0.35 } else { 0.16 }), if pal.dark { Color32::from_rgb(0xff, 0xa9, 0x4d) } else { Color32::from_rgb(0xb3, 0x45, 0x08) })
+                    (
+                        Color32::from_rgb(0xe8, 0x59, 0x0c).gamma_multiply(if pal.dark { 0.35 } else { 0.16 }),
+                        if pal.dark { Color32::from_rgb(0xff, 0xa9, 0x4d) } else { Color32::from_rgb(0xb3, 0x45, 0x08) },
+                    )
                 } else {
                     (pal.accent_soft, if pal.dark { pal.text } else { Color32::from_rgb(0x4a, 0x2d, 0x96) })
                 };
@@ -258,7 +270,7 @@ impl TokenField {
                     self.input = rest;
                 }
             }
-            if r.lost_focus() && !ui.input(|i| i.key_pressed(Key::Tab)) && !self.input.trim().is_empty() && accept.is_none() {
+            if r.lost_focus() && !self.input.trim().is_empty() && accept.is_none() {
                 self.commit();
                 changed = true;
             }
@@ -276,13 +288,14 @@ impl TokenField {
             self.focus_input = true;
             changed = true;
         }
-        if focused && self.selected_chip.is_some() && ui.input(|i| i.key_pressed(Key::Delete)) {
-            if let Some(sel) = self.selected_chip.take() {
-                if sel < self.tokens.len() {
-                    self.tokens.remove(sel);
-                    changed = true;
-                }
-            }
+        if focused
+            && self.selected_chip.is_some()
+            && ui.input(|i| i.key_pressed(Key::Delete))
+            && let Some(sel) = self.selected_chip.take()
+            && sel < self.tokens.len()
+        {
+            self.tokens.remove(sel);
+            changed = true;
         }
         // autocompletion
         let q = self.input.trim().to_string();
@@ -293,7 +306,11 @@ impl TokenField {
             self.suggestions = if q.is_empty() {
                 vec![]
             } else {
-                cx.store.complete_address(&q, 8).into_iter().filter(|a| !self.tokens.iter().any(|t| t.email.eq_ignore_ascii_case(&a.email))).collect()
+                cx.store
+                    .complete_address(&q, 8)
+                    .into_iter()
+                    .filter(|a| !self.tokens.iter().any(|t| t.email.eq_ignore_ascii_case(&a.email)))
+                    .collect()
             };
         }
         if focused && !self.suggestions.is_empty() {
@@ -315,10 +332,20 @@ impl TokenField {
                     if hl || resp.hovered() {
                         ui.painter().rect_filled(rect, 5.0, if hl { pal.accent } else { pal.hover_bg });
                     }
-                    let (c1, c2) = if hl { (pal.accent_text, pal.accent_text.gamma_multiply(0.85)) } else { (pal.text, pal.text_secondary) };
+                    let (c1, c2) = if hl {
+                        (pal.accent_text, pal.accent_text.gamma_multiply(0.85))
+                    } else {
+                        (pal.text, pal.text_secondary)
+                    };
                     let av = egui::Rect::from_center_size(egui::pos2(rect.left() + 18.0, rect.center().y), Vec2::splat(24.0));
                     ui.painter().circle_filled(av.center(), 12.0, crate::ui::widgets::name_color(&a.email));
-                    ui.painter().text(av.center(), Align2::CENTER_CENTER, crate::ui::widgets::initials(&a.name, &a.email), FontId::new(10.0, crate::ui::fonts::bold()), Color32::WHITE);
+                    ui.painter().text(
+                        av.center(),
+                        Align2::CENTER_CENTER,
+                        crate::ui::widgets::initials(&a.name, &a.email),
+                        FontId::new(10.0, crate::ui::fonts::bold()),
+                        Color32::WHITE,
+                    );
                     let x = rect.left() + 38.0;
                     if a.name.trim().is_empty() {
                         ui.painter().text(egui::pos2(x, rect.center().y), Align2::LEFT_CENTER, &a.email, FontId::proportional(13.0), c1);
@@ -365,7 +392,10 @@ mod tests {
 
     #[test]
     fn marking_rule() {
-        let st = TokenStyle { show_addresses: false, mark_not_ending_with: Some("example.com, corp.org".into()) };
+        let st = TokenStyle {
+            show_addresses: false,
+            mark_not_ending_with: Some("example.com, corp.org".into()),
+        };
         assert!(!st.is_marked(&Address::new("", "me@EXAMPLE.com")));
         assert!(!st.is_marked(&Address::new("", "a@corp.org")));
         assert!(st.is_marked(&Address::new("", "a@other.net")));

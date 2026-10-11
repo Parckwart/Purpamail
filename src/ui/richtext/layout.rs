@@ -29,7 +29,11 @@ pub struct InlineImage {
 impl InlineImage {
     pub fn new(cid: &str, bytes: Vec<u8>) -> Self {
         let size = image::load_from_memory(&bytes).map(|i| Vec2::new(i.width() as f32, i.height() as f32)).unwrap_or(Vec2::new(64.0, 64.0));
-        InlineImage { bytes: bytes.into(), size, uri: format!("bytes://inline-{}-{cid}", uuid::Uuid::new_v4().simple()) }
+        InlineImage {
+            bytes: bytes.into(),
+            size,
+            uri: format!("bytes://inline-{}-{cid}", uuid::Uuid::new_v4().simple()),
+        }
     }
 
     /// Display size when the available width is `avail`.
@@ -60,7 +64,14 @@ impl LayoutParams {
         } else {
             (Color32::from_rgb(0x1f, 0x6f, 0xeb), Color32::from_rgb(0x14, 0x8a, 0x7d), Color32::from_rgb(0x3c, 0x8c, 0x3a))
         };
-        LayoutParams { base_size, text: pal.text, link, quote: [pal.accent, q2, q3], code_bg: pal.hover_bg, plain }
+        LayoutParams {
+            base_size,
+            text: pal.text,
+            link,
+            quote: [pal.accent, q2, q3],
+            code_bg: pal.hover_bg,
+            plain,
+        }
     }
 
     pub fn quote_color(&self, level: u8) -> Color32 {
@@ -132,7 +143,10 @@ pub fn layout_doc(ui: &Ui, doc: &RichDoc, lp: &LayoutParams, images: &HashMap<St
             let b1 = byte_idx[r.end];
             let mut job = LayoutJob {
                 text: text[b0..b1].to_string(),
-                wrap: TextWrapping { max_width: avail, ..Default::default() },
+                wrap: TextWrapping {
+                    max_width: avail,
+                    ..Default::default()
+                },
                 halign: match para.align {
                     Align::Left => egui::Align::LEFT,
                     Align::Center => egui::Align::Center,
@@ -161,18 +175,41 @@ pub fn layout_doc(ui: &Ui, doc: &RichDoc, lp: &LayoutParams, images: &HashMap<St
                         fmt.line_height = Some(ds.y + 4.0);
                         fmt.underline = Stroke::NONE;
                         fmt.valign = egui::Align::BOTTOM;
-                        job.sections.push(LayoutSection { leading_space: 0.0, byte_range, format: fmt });
+                        job.sections.push(LayoutSection {
+                            leading_space: 0.0,
+                            byte_range,
+                            format: fmt,
+                        });
                     } else {
-                        job.sections.push(LayoutSection { leading_space: 0.0, byte_range, format: fmt });
+                        job.sections.push(LayoutSection {
+                            leading_space: 0.0,
+                            byte_range,
+                            format: fmt,
+                        });
                     }
                 }
                 j += 1;
             }
             if job.sections.is_empty() {
                 // empty paragraph: use the style of its terminating newline (keeps heading height)
-                let st = if r.start < doc.char_len() { doc.style_at(r.start) } else if r.start > 0 { doc.style_at(r.start - 1) } else { Style::default() };
-                let st = Style { image: None, link: None, highlight: None, ..st };
-                job.sections.push(LayoutSection { leading_space: 0.0, byte_range: ByteIndex(0)..ByteIndex(job.text.len()), format: format_for(&st, &para, lp) });
+                let st = if r.start < doc.char_len() {
+                    doc.style_at(r.start)
+                } else if r.start > 0 {
+                    doc.style_at(r.start - 1)
+                } else {
+                    Style::default()
+                };
+                let st = Style {
+                    image: None,
+                    link: None,
+                    highlight: None,
+                    ..st
+                };
+                job.sections.push(LayoutSection {
+                    leading_space: 0.0,
+                    byte_range: ByteIndex(0)..ByteIndex(job.text.len()),
+                    format: format_for(&st, &para, lp),
+                });
             }
             let g = f.layout_job(job);
             let dx = indent
@@ -194,8 +231,15 @@ pub fn layout_doc(ui: &Ui, doc: &RichDoc, lp: &LayoutParams, images: &HashMap<St
     });
     let full = LayoutJob {
         text: text.to_string(),
-        sections: vec![LayoutSection { leading_space: 0.0, byte_range: ByteIndex(0)..ByteIndex(text.len()), format: TextFormat::simple(FontId::new(lp.base_size, fonts::message()), lp.text) }],
-        wrap: TextWrapping { max_width: wrap_width, ..Default::default() },
+        sections: vec![LayoutSection {
+            leading_space: 0.0,
+            byte_range: ByteIndex(0)..ByteIndex(text.len()),
+            format: TextFormat::simple(FontId::new(lp.base_size, fonts::message()), lp.text),
+        }],
+        wrap: TextWrapping {
+            max_width: wrap_width,
+            ..Default::default()
+        },
         keep_trailing_whitespace: true,
         ..Default::default()
     };
@@ -286,7 +330,9 @@ pub fn paint_decorations(ui: &Ui, doc: &RichDoc, lp: &LayoutParams, images: &Has
             while j + 1 < paras.len() && paras[j + 1].quote >= level {
                 j += 1;
             }
-            let (Some(r0), Some(r1)) = (galley.rows.get(rows[i].start), galley.rows.get(rows[j].end.saturating_sub(1).max(rows[j].start))) else { break };
+            let (Some(r0), Some(r1)) = (galley.rows.get(rows[i].start), galley.rows.get(rows[j].end.saturating_sub(1).max(rows[j].start))) else {
+                break;
+            };
             let x = origin.x + (level as f32 - 1.0) * QUOTE_INDENT + 3.0;
             let y0 = origin.y + r0.pos.y + 1.0;
             let y1 = origin.y + r1.pos.y + r1.size.y - 1.0;

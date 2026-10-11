@@ -70,7 +70,13 @@ fn marks_for(st: &Style, base: &Style) -> Vec<Mark> {
     if let Some(c) = st.highlight.filter(|_| st.highlight != base.highlight) {
         v.push(Mark::Highlight(c));
     }
-    for (on, b, m) in [(st.bold, base.bold, Mark::Bold), (st.italic, base.italic, Mark::Italic), (st.underline, base.underline, Mark::Underline), (st.strike, base.strike, Mark::Strike), (st.mono, base.mono, Mark::Mono)] {
+    for (on, b, m) in [
+        (st.bold, base.bold, Mark::Bold),
+        (st.italic, base.italic, Mark::Italic),
+        (st.underline, base.underline, Mark::Underline),
+        (st.strike, base.strike, Mark::Strike),
+        (st.mono, base.mono, Mark::Mono),
+    ] {
         if on && !b {
             v.push(m);
         }
@@ -131,12 +137,14 @@ pub fn to_markup(doc: &RichDoc) -> String {
             Align::Left => {}
         }
         // heading paragraphs
-        let spans: Vec<(std::ops::Range<usize>, Style)> =
-            doc.spans().filter_map(|(sr, st)| {
+        let spans: Vec<(std::ops::Range<usize>, Style)> = doc
+            .spans()
+            .filter_map(|(sr, st)| {
                 let a = sr.start.max(r.start);
                 let b = sr.end.min(r.end);
                 (a < b).then(|| (a..b, st.clone()))
-            }).collect();
+            })
+            .collect();
         let mut base = Style::default();
         if !spans.is_empty() {
             if spans.iter().all(|(_, s)| s.size == FontSize::Heading && s.bold) {
@@ -215,14 +223,8 @@ impl Parser {
 }
 
 fn starts(chars: &[char], i: usize, pat: &str) -> bool {
-    let mut j = i;
-    for p in pat.chars() {
-        if j >= chars.len() || chars[j] != p {
-            return false;
-        }
-        j += 1;
-    }
-    true
+    let n = pat.chars().count();
+    i + n <= chars.len() && chars[i..i + n].iter().copied().eq(pat.chars())
 }
 
 /// Find an unescaped occurrence of `pat` at or after `from`.
@@ -258,12 +260,12 @@ fn parse_inline(p: &mut Parser, line: &str, base: &Style) {
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
-        if let Some((end, _, after)) = &link {
-            if i == *end {
-                i = *after;
-                link = None;
-                continue;
-            }
+        if let Some((end, _, after)) = &link
+            && i == *end
+        {
+            i = *after;
+            link = None;
+            continue;
         }
         if c == '\\' && i + 1 < chars.len() {
             let st = style(&stack, &link);
@@ -272,26 +274,32 @@ fn parse_inline(p: &mut Parser, line: &str, base: &Style) {
             continue;
         }
         // inline image
-        if starts(&chars, i, "![](") {
-            if let Some(close) = find_unescaped(&chars, i + 4, ")") {
-                let target: String = chars[i + 4..close].iter().collect();
-                if let Some(cid) = target.strip_prefix("cid:") {
-                    p.push(OBJ, &Style { image: Some(cid.to_string()), ..Default::default() });
-                }
-                i = close + 1;
-                continue;
+        if starts(&chars, i, "![](")
+            && let Some(close) = find_unescaped(&chars, i + 4, ")")
+        {
+            let target: String = chars[i + 4..close].iter().collect();
+            if let Some(cid) = target.strip_prefix("cid:") {
+                p.push(
+                    OBJ,
+                    &Style {
+                        image: Some(cid.to_string()),
+                        ..Default::default()
+                    },
+                );
             }
+            i = close + 1;
+            continue;
         }
         // link
-        if c == '[' && link.is_none() {
-            if let Some(mid) = find_unescaped(&chars, i + 1, "](") {
-                if let Some(close) = find_unescaped(&chars, mid + 2, ")") {
-                    let url: String = chars[mid + 2..close].iter().collect::<String>().replace("%29", ")").replace("%20", " ");
-                    link = Some((mid, url, close + 1));
-                    i += 1;
-                    continue;
-                }
-            }
+        if c == '['
+            && link.is_none()
+            && let Some(mid) = find_unescaped(&chars, i + 1, "](")
+            && let Some(close) = find_unescaped(&chars, mid + 2, ")")
+        {
+            let url: String = chars[mid + 2..close].iter().collect::<String>().replace("%29", ")").replace("%20", " ");
+            link = Some((mid, url, close + 1));
+            i += 1;
+            continue;
         }
         // value marks
         if c == '{' {
@@ -305,12 +313,12 @@ fn parse_inline(p: &mut Parser, line: &str, base: &Style) {
                             "{color=" => parse_css_color(&val).map(Mark::Color),
                             _ => parse_css_color(&val).map(Mark::Highlight),
                         };
-                        if let Some(m) = m {
-                            if find_unescaped(&chars, end, close_kw).is_some() {
-                                stack.push(m);
-                                i = end + 1;
-                                handled = true;
-                            }
+                        if let Some(m) = m
+                            && find_unescaped(&chars, end, close_kw).is_some()
+                        {
+                            stack.push(m);
+                            i = end + 1;
+                            handled = true;
                         }
                     }
                     break;
@@ -335,12 +343,12 @@ fn parse_inline(p: &mut Parser, line: &str, base: &Style) {
         }
         // flag marks: close the top of the stack first, then open
         let flag = [("**", Mark::Bold), ("__", Mark::Underline), ("~~", Mark::Strike), ("*", Mark::Italic), ("`", Mark::Mono)];
-        if let Some(top) = stack.last() {
-            if let Some((pat, _)) = flag.iter().find(|(pat, m)| m == top && starts(&chars, i, pat)) {
-                stack.pop();
-                i += pat.len();
-                continue;
-            }
+        if let Some(top) = stack.last()
+            && let Some((pat, _)) = flag.iter().find(|(pat, m)| m == top && starts(&chars, i, pat))
+        {
+            stack.pop();
+            i += pat.len();
+            continue;
         }
         let mut opened = false;
         for (pat, m) in &flag {
@@ -367,7 +375,11 @@ fn parse_inline(p: &mut Parser, line: &str, base: &Style) {
 /// Parse markup into a document.
 pub fn from_markup(src: &str) -> RichDoc {
     let src = src.replace("\r\n", "\n");
-    let mut p = Parser { text: String::new(), runs: Vec::new(), paras: Vec::new() };
+    let mut p = Parser {
+        text: String::new(),
+        runs: Vec::new(),
+        paras: Vec::new(),
+    };
     for (li, line) in src.split('\n').enumerate() {
         if li > 0 {
             p.push('\n', &Style::default());

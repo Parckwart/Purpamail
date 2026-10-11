@@ -32,14 +32,23 @@ impl Default for SendLaterPicker {
     fn default() -> Self {
         let next = Local::now() + Duration::hours(1);
         let date = next.date_naive();
-        SendLaterPicker { date, hour: next.hour(), minute: 0, date_text: date.format("%Y-%m-%d").to_string(), view: date.with_day(1).unwrap_or(date) }
+        SendLaterPicker {
+            date,
+            hour: next.hour(),
+            minute: 0,
+            date_text: date.format("%Y-%m-%d").to_string(),
+            view: date.with_day(1).unwrap_or(date),
+        }
     }
 }
 
 impl SendLaterPicker {
     /// The chosen moment as a Unix timestamp.
     pub fn timestamp(&self) -> Option<i64> {
-        Local.with_ymd_and_hms(self.date.year(), self.date.month(), self.date.day(), self.hour, self.minute, 0).earliest().map(|t| t.timestamp())
+        Local
+            .with_ymd_and_hms(self.date.year(), self.date.month(), self.date.day(), self.hour, self.minute, 0)
+            .earliest()
+            .map(|t| t.timestamp())
     }
 
     fn set_date(&mut self, d: NaiveDate) {
@@ -118,11 +127,11 @@ impl SendLaterPicker {
         egui::Grid::new("send-later-fields").num_columns(2).spacing([10.0, 8.0]).show(ui, |ui| {
             ui.label(RichText::new("Date:").color(pal.text_secondary));
             let r = ui.add(egui::TextEdit::singleline(&mut self.date_text).desired_width(110.0).hint_text("YYYY-MM-DD"));
-            if r.changed() {
-                if let Ok(d) = NaiveDate::parse_from_str(self.date_text.trim(), "%Y-%m-%d") {
-                    self.date = d;
-                    self.view = d.with_day(1).unwrap_or(d);
-                }
+            if r.changed()
+                && let Ok(d) = NaiveDate::parse_from_str(self.date_text.trim(), "%Y-%m-%d")
+            {
+                self.date = d;
+                self.view = d.with_day(1).unwrap_or(d);
             }
             ui.end_row();
             ui.label(RichText::new("Time:").color(pal.text_secondary));
@@ -144,7 +153,10 @@ impl SendLaterPicker {
         ui.label(RichText::new(summary).size(12.0).color(if valid { pal.text_secondary } else { pal.danger }));
         ui.add_space(10.0);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let sched = ui.add_enabled(valid, egui::Button::new(RichText::new("Schedule").color(pal.accent_text)).fill(pal.accent).min_size(Vec2::new(84.0, 26.0)));
+            let sched = ui.add_enabled(
+                valid,
+                egui::Button::new(RichText::new("Schedule").color(pal.accent_text)).fill(pal.accent).min_size(Vec2::new(84.0, 26.0)),
+            );
             if sched.clicked() {
                 result = Some(true);
             }

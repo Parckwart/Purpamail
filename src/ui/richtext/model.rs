@@ -92,13 +92,30 @@ pub struct Style {
 impl Style {
     /// True if the style carries no visible formatting (ignoring the signature marker).
     pub fn is_plain(&self) -> bool {
-        let Style { bold, italic, underline, strike, mono, size, color, highlight, link, image, signature: _ } = self;
+        let Style {
+            bold,
+            italic,
+            underline,
+            strike,
+            mono,
+            size,
+            color,
+            highlight,
+            link,
+            image,
+            signature: _,
+        } = self;
         !bold && !italic && !underline && !strike && !mono && *size == FontSize::Normal && color.is_none() && highlight.is_none() && link.is_none() && image.is_none()
     }
 
     /// The same style with all formatting removed (keeps links, images and the signature marker).
     pub fn cleared(&self) -> Style {
-        Style { link: self.link.clone(), image: self.image.clone(), signature: self.signature, ..Default::default() }
+        Style {
+            link: self.link.clone(),
+            image: self.image.clone(),
+            signature: self.signature,
+            ..Default::default()
+        }
     }
 }
 
@@ -198,7 +215,11 @@ pub struct RichDoc {
 
 impl Default for RichDoc {
     fn default() -> Self {
-        RichDoc { text: String::new(), runs: Vec::new(), paras: vec![ParaAttr::default()] }
+        RichDoc {
+            text: String::new(),
+            runs: Vec::new(),
+            paras: vec![ParaAttr::default()],
+        }
     }
 }
 
@@ -245,7 +266,11 @@ pub fn diff(old: &str, new: &str, cursor_after: Option<usize>) -> Option<TextCha
     while s < max_common - p && a[a.len() - 1 - s] == b[b.len() - 1 - s] {
         s += 1;
     }
-    let mut change = TextChange { start: p, old_end: a.len() - s, new_end: b.len() - s };
+    let mut change = TextChange {
+        start: p,
+        old_end: a.len() - s,
+        new_end: b.len() - s,
+    };
     if let Some(c) = cursor_after {
         if b.len() > a.len() && change.deleted() == 0 {
             // pure insertion of n chars ending at the cursor?
@@ -298,7 +323,10 @@ impl RichDoc {
             }
         }
         if total < n {
-            runs.push(Run { len: n - total, style: Style::default() });
+            runs.push(Run {
+                len: n - total,
+                style: Style::default(),
+            });
         }
         let want = text.matches('\n').count() + 1;
         paras.resize(want, paras.last().copied().unwrap_or_default());
@@ -391,7 +419,13 @@ impl RichDoc {
             (None, None) => {
                 // empty paragraph: inherit from the newline before it (so a
                 // new line continues the formatting), but never links / images
-                let mut st = if pos > 0 { self.style_at(pos - 1) } else if pos < chars.len() { self.style_at(pos) } else { Style::default() };
+                let mut st = if pos > 0 {
+                    self.style_at(pos - 1)
+                } else if pos < chars.len() {
+                    self.style_at(pos)
+                } else {
+                    Style::default()
+                };
                 st.link = None;
                 st
             }
@@ -480,7 +514,10 @@ impl RichDoc {
             o = re;
             // part before start
             if rs < start {
-                out.push(Run { len: re.min(start) - rs, style: r.style.clone() });
+                out.push(Run {
+                    len: re.min(start) - rs,
+                    style: r.style.clone(),
+                });
             }
             if !inserted && re > start {
                 out.extend(other.runs.iter().cloned());
@@ -488,7 +525,10 @@ impl RichDoc {
             }
             // part after end
             if re > end {
-                out.push(Run { len: re - rs.max(end), style: r.style });
+                out.push(Run {
+                    len: re - rs.max(end),
+                    style: r.style,
+                });
             }
         }
         if !inserted {
@@ -852,7 +892,15 @@ mod tests {
         assert_eq!(d.insertion_style(8).link, None);
         // typing inside the link does
         assert!(d.insertion_style(6).link.is_some());
-        d.replace(0, 0, &OBJ.to_string(), &Style { image: Some("cid1".into()), ..Default::default() });
+        d.replace(
+            0,
+            0,
+            &OBJ.to_string(),
+            &Style {
+                image: Some("cid1".into()),
+                ..Default::default()
+            },
+        );
         assert_eq!(d.insertion_style(1).image, None);
         assert_eq!(d.image_ids(), vec!["cid1".to_string()]);
     }
@@ -879,7 +927,15 @@ mod tests {
                 2 => d.indent(a, b, if rnd(2) == 0 { 1 } else { -1 }),
                 _ => {
                     let p = pieces[rnd(pieces.len())];
-                    d.replace(a, b, p, &Style { italic: rnd(2) == 0, ..Default::default() })
+                    d.replace(
+                        a,
+                        b,
+                        p,
+                        &Style {
+                            italic: rnd(2) == 0,
+                            ..Default::default()
+                        },
+                    )
                 }
             }
             d.check().unwrap();

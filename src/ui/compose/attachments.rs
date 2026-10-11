@@ -35,7 +35,12 @@ impl ComposeAttachment {
 pub fn read_file(path: &Path) -> std::io::Result<OutgoingAttachment> {
     let data = std::fs::read(path)?;
     let filename = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "attachment".into());
-    Ok(OutgoingAttachment { mime_type: guess_mime(&filename).to_string(), filename, data, content_id: None })
+    Ok(OutgoingAttachment {
+        mime_type: guess_mime(&filename).to_string(),
+        filename,
+        data,
+        content_id: None,
+    })
 }
 
 /// MIME type for image bytes (falls back to the file name).
@@ -70,19 +75,24 @@ pub fn tiles(ui: &mut Ui, atts: &[ComposeAttachment]) -> Option<usize> {
             p.rect_stroke(rect, 8.0, Stroke::new(1.0, pal.separator), egui::StrokeKind::Inside);
             let thumb = egui::Rect::from_min_size(rect.min + Vec2::new(6.0, 6.0), Vec2::splat(40.0));
             if a.is_image() {
-                egui::Image::from_bytes(a.uri.clone(), a.att.data.clone()).corner_radius(5.0).maintain_aspect_ratio(true).fit_to_exact_size(thumb.size()).paint_at(ui, thumb);
+                egui::Image::from_bytes(a.uri.clone(), a.att.data.clone())
+                    .corner_radius(5.0)
+                    .maintain_aspect_ratio(true)
+                    .fit_to_exact_size(thumb.size())
+                    .paint_at(ui, thumb);
             } else {
                 ui.painter().rect_filled(thumb, 6.0, pal.accent_soft);
-                ui.painter().text(thumb.center(), Align2::CENTER_CENTER, widgets::file_icon(&a.att.mime_type, &a.att.filename), FontId::proportional(22.0), pal.accent);
+                ui.painter().text(
+                    thumb.center(),
+                    Align2::CENTER_CENTER,
+                    widgets::file_icon(&a.att.mime_type, &a.att.filename),
+                    FontId::proportional(22.0),
+                    pal.accent,
+                );
             }
             let text_x = thumb.right() + 10.0;
             let max_w = rect.right() - text_x - 30.0;
-            let name = ui.painter().layout(
-                a.att.filename.clone(),
-                FontId::proportional(13.0),
-                pal.text,
-                max_w,
-            );
+            let name = ui.painter().layout(a.att.filename.clone(), FontId::proportional(13.0), pal.text, max_w);
             let name = if name.rows.len() > 1 {
                 let mut job = egui::text::LayoutJob::simple_singleline(a.att.filename.clone(), FontId::proportional(13.0), pal.text);
                 job.wrap = egui::text::TextWrapping::truncate_at_width(max_w);
@@ -91,13 +101,25 @@ pub fn tiles(ui: &mut Ui, atts: &[ComposeAttachment]) -> Option<usize> {
                 name
             };
             ui.painter().galley(egui::pos2(text_x, rect.top() + 9.0), name, pal.text);
-            ui.painter().text(egui::pos2(text_x, rect.bottom() - 10.0), Align2::LEFT_BOTTOM, human_size(a.att.data.len() as u64), FontId::proportional(11.5), pal.text_secondary);
+            ui.painter().text(
+                egui::pos2(text_x, rect.bottom() - 10.0),
+                Align2::LEFT_BOTTOM,
+                human_size(a.att.data.len() as u64),
+                FontId::proportional(11.5),
+                pal.text_secondary,
+            );
             // remove button
             let xr = egui::Rect::from_center_size(egui::pos2(rect.right() - 16.0, rect.center().y), Vec2::splat(20.0));
             let xresp = ui.interact(xr, ui.id().with(("att-remove", i)), Sense::click());
             if hovered || xresp.hovered() {
                 ui.painter().circle_filled(xr.center(), 10.0, if xresp.hovered() { pal.danger } else { pal.separator });
-                ui.painter().text(xr.center(), Align2::CENTER_CENTER, ic::X, FontId::proportional(11.0), if xresp.hovered() { Color32::WHITE } else { pal.text_secondary });
+                ui.painter().text(
+                    xr.center(),
+                    Align2::CENTER_CENTER,
+                    ic::X,
+                    FontId::proportional(11.0),
+                    if xresp.hovered() { Color32::WHITE } else { pal.text_secondary },
+                );
             }
             if xresp.on_hover_text("Remove Attachment").clicked() {
                 remove = Some(i);
@@ -126,6 +148,10 @@ pub fn size_summary(ui: &mut Ui, atts: &[ComposeAttachment]) {
     ui.label(RichText::new(format!("{text}, {}", human_size(total))).size(12.0).color(pal.text_secondary));
     if total > LARGE_MESSAGE {
         ui.add_space(8.0);
-        ui.label(RichText::new(format!("{} This message may be too large for some servers", ic::WARNING)).size(12.0).color(Color32::from_rgb(0xe8, 0x59, 0x0c)));
+        ui.label(
+            RichText::new(format!("{} This message may be too large for some servers", ic::WARNING))
+                .size(12.0)
+                .color(Color32::from_rgb(0xe8, 0x59, 0x0c)),
+        );
     }
 }

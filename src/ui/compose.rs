@@ -18,7 +18,7 @@ use self::init::{Prefill, SigAnchor};
 use self::send_later::SendLaterPicker;
 use self::tokens::{TokenField, TokenStyle};
 use super::actions::{Action, ComposeInit, UiCx};
-use super::richtext::{self, RichDoc, RichTextEditor, Rgb};
+use super::richtext::{self, Rgb, RichDoc, RichTextEditor};
 use super::theme::Palette;
 use super::widgets;
 use crate::core::compose::{self, OutgoingAttachment, OutgoingMessage, ReplyKind};
@@ -43,9 +43,18 @@ struct FromChoice {
 /// Modal dialogs shown inside the compose window.
 enum Dialog {
     SaveDraft,
-    Error { title: String, message: String },
+    Error {
+        title: String,
+        message: String,
+    },
     /// Confirmation during send validation; "OK" continues with `next_step`.
-    Confirm { title: String, message: String, ok: String, next_step: u8, send_at: Option<i64> },
+    Confirm {
+        title: String,
+        message: String,
+        ok: String,
+        next_step: u8,
+        send_at: Option<i64>,
+    },
     SendLater,
 }
 
@@ -70,6 +79,8 @@ pub struct ComposeWindow {
     in_reply_to: String,
     references: Vec<String>,
     draft_id: Option<MessageId>,
+    /// The composer re-opened an existing draft (never delete it on "Don't Save").
+    editing_draft: bool,
     redirect_raw: Option<Vec<u8>>,
     signature_id: Option<String>,
     sig_anchor: SigAnchor,
@@ -88,6 +99,7 @@ pub struct ComposeWindow {
     first_frame: bool,
     focus_body: bool,
     font_size: f32,
+    font_family: String,
 }
 
 fn kv_flag(cx: &UiCx, key: &str, default: bool) -> bool {
@@ -120,13 +132,13 @@ impl ComposeWindow {
                 let mut p = init::new_message(vec![], vec![], String::new(), "", vec![], &settings);
                 for (i, mid) in ids.iter().enumerate() {
                     if let Some(raw) = cx.store.raw(*mid) {
-                        if i == 0 {
-                            if let Some(parsed) = mime::parse(&raw) {
-                                p.subject = compose::prefixed_subject("Fwd:", &parsed.subject);
-                                if let Some((a, e)) = init::receiving_address(&parsed, &settings) {
-                                    p.account_id = Some(a);
-                                    p.from_email = Some(e);
-                                }
+                        if i == 0
+                            && let Some(parsed) = mime::parse(&raw)
+                        {
+                            p.subject = compose::prefixed_subject("Fwd:", &parsed.subject);
+                            if let Some((a, e)) = init::receiving_address(&parsed, &settings) {
+                                p.account_id = Some(a);
+                                p.from_email = Some(e);
                             }
                         }
                         p.attachments.push(init::message_attachment(&raw));
@@ -178,10 +190,17 @@ impl ComposeWindow {
         let from_choices: Vec<FromChoice> = settings
             .accounts
             .iter()
-            .flat_map(|a| a.emails.iter().map(move |e| FromChoice { account_id: a.id.clone(), address: Address::new(a.full_name.clone(), e.clone()) }))
+            .flat_map(|a| {
+                a.emails.iter().map(move |e| FromChoice {
+                    account_id: a.id.clone(),
+                    address: Address::new(a.full_name.clone(), e.clone()),
+                })
+            })
             .collect();
         let find = |acct: Option<&str>, email: Option<&str>| -> Option<usize> {
-            from_choices.iter().position(|c| acct.is_none_or(|a| a == c.account_id) && email.is_none_or(|e| e.eq_ignore_ascii_case(&c.address.email)))
+            from_choices
+                .iter()
+                .position(|c| acct.is_none_or(|a| a == c.account_id) && email.is_none_or(|e| e.eq_ignore_ascii_case(&c.address.email)))
         };
         let from_idx = find(p.account_id.as_deref(), p.from_email.as_deref())
             .or_else(|| p.from_email.as_deref().and_then(|e| find(None, Some(e))))
@@ -204,17 +223,18 @@ impl ComposeWindow {
         let mut bcc = p.bcc.clone();
         let mut auto_cc = false;
         let mut auto_bcc = false;
-        if auto_self && !redirect {
-            if let Some(f) = &from_addr {
-                let acct_bcc = from_choices.get(from_idx).and_then(|c| settings.account(&c.account_id)).is_some_and(|a| a.auto_bcc_myself);
-                if settings.composing.auto_cc_myself && !cc.iter().any(|a| a.email.eq_ignore_ascii_case(&f.email)) {
-                    cc.push(f.clone());
-                    auto_cc = true;
-                }
-                if (settings.composing.auto_bcc_myself || acct_bcc) && !bcc.iter().any(|a| a.email.eq_ignore_ascii_case(&f.email)) {
-                    bcc.push(f.clone());
-                    auto_bcc = true;
-                }
+        if auto_self
+            && !redirect
+            && let Some(f) = &from_addr
+        {
+            let acct_bcc = from_choices.get(from_idx).and_then(|c| settings.account(&c.account_id)).is_some_and(|a| a.auto_bcc_myself);
+            if settings.composing.auto_cc_myself && !cc.iter().any(|a| a.email.eq_ignore_ascii_case(&f.email)) {
+                cc.push(f.clone());
+                auto_cc = true;
+            }
+            if (settings.composing.auto_bcc_myself || acct_bcc) && !bcc.iter().any(|a| a.email.eq_ignore_ascii_case(&f.email)) {
+                bcc.push(f.clone());
+                auto_bcc = true;
             }
         }
         let message_id = p.message_id.clone().unwrap_or_else(|| compose::new_message_id(from_addr.as_ref().unwrap_or(&Address::default())));
@@ -238,6 +258,7 @@ impl ComposeWindow {
             in_reply_to: p.in_reply_to.clone(),
             references: p.references.clone(),
             draft_id,
+            editing_draft: draft_id.is_some(),
             redirect_raw: p.redirect_raw.clone(),
             signature_id: None,
             sig_anchor: p.sig_anchor,
@@ -255,6 +276,7 @@ impl ComposeWindow {
             first_frame: true,
             focus_body: p.focus_body,
             font_size: settings.composing.default_font_size,
+            font_family: settings.composing.default_font.clone(),
             from_choices,
         };
         if p.insert_signature && !redirect {
@@ -274,7 +296,7 @@ impl ComposeWindow {
         self.from_choices.get(self.from_idx).map(|c| c.account_id.clone())
     }
 
-    fn from_address(&self) -> Option<Address> {
+    fn sender(&self) -> Option<Address> {
         self.from_choices.get(self.from_idx).map(|c| c.address.clone())
     }
 
@@ -330,10 +352,10 @@ impl ComposeWindow {
         if idx == self.from_idx || idx >= self.from_choices.len() {
             return;
         }
-        let old = self.from_address();
+        let old = self.sender();
         let old_acct = self.account_id();
         self.from_idx = idx;
-        let new = self.from_address();
+        let new = self.sender();
         if let (Some(o), Some(n)) = (old, new) {
             for (auto, field) in [(self.auto_cc, &mut self.cc), (self.auto_bcc, &mut self.bcc)] {
                 if auto {
@@ -346,7 +368,11 @@ impl ComposeWindow {
             }
         }
         if self.account_id() != old_acct && !self.is_redirect() {
-            let def = self.account_id().and_then(|a| settings.account(&a)).and_then(|a| a.signature.clone()).filter(|s| settings.signature(s).is_some());
+            let def = self
+                .account_id()
+                .and_then(|a| settings.account(&a))
+                .and_then(|a| a.signature.clone())
+                .filter(|s| settings.signature(s).is_some());
             if def != self.signature_id {
                 self.set_signature(settings, def);
             }
@@ -371,7 +397,13 @@ impl ComposeWindow {
     }
 
     fn insert_photo(&mut self, cx: &mut UiCx) {
-        let Some(paths) = rfd::FileDialog::new().set_title("Insert Photo").add_filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "bmp"]).pick_files() else { return };
+        let Some(paths) = rfd::FileDialog::new()
+            .set_title("Insert Photo")
+            .add_filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "bmp"])
+            .pick_files()
+        else {
+            return;
+        };
         if self.editor.plain {
             self.attach_paths(cx, paths);
             return;
@@ -397,7 +429,7 @@ impl ComposeWindow {
 
     /// The message as it would be sent now.
     fn build_message(&self) -> OutgoingMessage {
-        let from = self.from_address().unwrap_or_default();
+        let from = self.sender().unwrap_or_default();
         let mut attachments: Vec<OutgoingAttachment> = self.attachments.iter().map(|a| a.att.clone()).collect();
         let html = if self.editor.plain {
             None
@@ -410,10 +442,15 @@ impl ComposeWindow {
                 if let Some(bytes) = self.editor.image_bytes(&cid) {
                     let mime_type = attachments::image_mime(bytes, "");
                     let ext = mime_type.rsplit('/').next().unwrap_or("png").replace("jpeg", "jpg");
-                    attachments.push(OutgoingAttachment { filename: format!("image{}.{ext}", n + 1), mime_type, data: bytes.to_vec(), content_id: Some(cid) });
+                    attachments.push(OutgoingAttachment {
+                        filename: format!("image{}.{ext}", n + 1),
+                        mime_type,
+                        data: bytes.to_vec(),
+                        content_id: Some(cid),
+                    });
                 }
             }
-            Some(richtext::to_html_document(self.editor.doc(), self.font_size, self.background))
+            Some(richtext::to_html_document(self.editor.doc(), Some(&self.font_family), self.font_size, self.background))
         };
         let mut msg = OutgoingMessage {
             account_id: self.account_id().unwrap_or_default(),
@@ -444,7 +481,10 @@ impl ComposeWindow {
     }
 
     fn error(&mut self, title: &str, message: impl Into<String>) {
-        self.dialog = Some(Dialog::Error { title: title.into(), message: message.into() });
+        self.dialog = Some(Dialog::Error {
+            title: title.into(),
+            message: message.into(),
+        });
     }
 
     /// Validate and send, starting at validation `step` (later steps resume
@@ -452,7 +492,7 @@ impl ComposeWindow {
     fn send(&mut self, cx: &mut UiCx, send_at: Option<i64>, step: u8) {
         self.commit_fields();
         if step == 0 {
-            if self.from_address().is_none() {
+            if self.sender().is_none() {
                 self.error("No account to send from", "Add a mail account in Preferences before sending messages.");
                 return;
             }
@@ -472,7 +512,13 @@ impl ComposeWindow {
             }
         }
         if step <= 1 && !self.is_redirect() && self.subject.trim().is_empty() {
-            self.dialog = Some(Dialog::Confirm { title: "Send without a subject?".into(), message: "This message has no subject. Do you want to send it anyway?".into(), ok: "Send".into(), next_step: 2, send_at });
+            self.dialog = Some(Dialog::Confirm {
+                title: "Send without a subject?".into(),
+                message: "This message has no subject. Do you want to send it anyway?".into(),
+                ok: "Send".into(),
+                next_step: 2,
+                send_at,
+            });
             return;
         }
         if step <= 2 && !self.is_redirect() && self.attachments.is_empty() && init::mentions_attachment(self.editor.doc()) {
@@ -491,7 +537,11 @@ impl ComposeWindow {
                 let list: Vec<String> = words.iter().take(12).cloned().collect();
                 self.dialog = Some(Dialog::Confirm {
                     title: "The message contains spelling errors".into(),
-                    message: format!("Possible misspellings: {}{}.\nDo you want to send it anyway?", list.join(", "), if words.len() > 12 { ", …" } else { "" }),
+                    message: format!(
+                        "Possible misspellings: {}{}.\nDo you want to send it anyway?",
+                        list.join(", "),
+                        if words.len() > 12 { ", …" } else { "" }
+                    ),
                     ok: "Send Anyway".into(),
                     next_step: 4,
                     send_at,
@@ -500,7 +550,11 @@ impl ComposeWindow {
             }
         }
         let message = self.build_message();
-        cx.act(Action::Send { message: Box::new(message), send_at, draft: self.draft_id });
+        cx.act(Action::Send {
+            message: Box::new(message),
+            send_at,
+            draft: self.draft_id,
+        });
         self.open = false;
     }
 
@@ -528,13 +582,14 @@ impl ComposeWindow {
         }
     }
 
-    /// Close without saving; removes an autosaved draft.
+    /// Close without saving; removes a draft autosaved by this window (a
+    /// re-opened draft is kept).
     fn discard(&mut self, cx: &mut UiCx) {
-        if let Some(d) = self.draft_id.take() {
-            if let Ok(accts) = ops::erase_messages(cx.store, &[d]) {
-                for a in accts {
-                    cx.engine.send(Command::FlushOps(a));
-                }
+        if let Some(d) = self.draft_id.take().filter(|_| !self.editing_draft)
+            && let Ok(accts) = ops::erase_messages(cx.store, &[d])
+        {
+            for a in accts {
+                cx.engine.send(Command::FlushOps(a));
             }
         }
         self.open = false;
@@ -547,7 +602,10 @@ impl ComposeWindow {
         let tdoc = richtext::from_markup(&t.body);
         let user_empty = {
             let d = self.editor.doc();
-            d.para_ranges().iter().enumerate().all(|(i, r)| d.paras()[i].quote > 0 || d.slice(r.clone()).chars().enumerate().all(|(ci, c)| c.is_whitespace() || d.style_at(r.start + ci).signature))
+            d.para_ranges()
+                .iter()
+                .enumerate()
+                .all(|(i, r)| d.paras()[i].quote > 0 || d.slice(r.clone()).chars().enumerate().all(|(ci, c)| c.is_whitespace() || d.style_at(r.start + ci).signature))
         };
         if self.editor.plain && !tdoc.is_unformatted() {
             self.editor.set_plain(false);
@@ -572,7 +630,11 @@ impl ComposeWindow {
         if !self.open {
             return false;
         }
-        let title = if self.subject.trim().is_empty() { "New Message".to_string() } else { self.subject.trim().to_string() };
+        let title = if self.subject.trim().is_empty() {
+            "New Message".to_string()
+        } else {
+            self.subject.trim().to_string()
+        };
         let vid = egui::ViewportId::from_hash_of(("compose", self.id));
         let builder = egui::ViewportBuilder::default().with_title(title).with_inner_size([760.0, 640.0]).with_min_inner_size([480.0, 360.0]);
         ctx.show_viewport_immediate(vid, builder, |ui, _class| self.window_ui(ui, cx));
@@ -640,7 +702,12 @@ impl ComposeWindow {
             .show(ui, |ui| self.toolbar(ui, cx));
         if self.show_format_bar && !self.editor.plain && !self.is_redirect() {
             egui::Panel::top(egui::Id::new(("compose-format", self.id)))
-                .frame(egui::Frame::new().fill(pal.toolbar_bg).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 6 }))
+                .frame(egui::Frame::new().fill(pal.toolbar_bg).inner_margin(egui::Margin {
+                    left: 10,
+                    right: 10,
+                    top: 0,
+                    bottom: 6,
+                }))
                 .show(ui, |ui| self.editor.format_bar(ui));
         }
         egui::Panel::bottom(egui::Id::new(("compose-status", self.id)))
@@ -668,7 +735,13 @@ impl ComposeWindow {
             let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new(("compose-drop", self.id))));
             painter.rect_filled(rect.shrink(6.0), 12.0, pal.accent.gamma_multiply(0.12));
             painter.rect_stroke(rect.shrink(6.0), 12.0, egui::Stroke::new(2.0, pal.accent), egui::StrokeKind::Inside);
-            painter.text(rect.center(), egui::Align2::CENTER_CENTER, format!("{}  Drop files to attach", ic::PAPERCLIP), egui::FontId::proportional(18.0), pal.accent);
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                format!("{}  Drop files to attach", ic::PAPERCLIP),
+                egui::FontId::proportional(18.0),
+                pal.accent,
+            );
         }
         if self.first_frame {
             self.first_frame = false;
@@ -688,12 +761,22 @@ impl ComposeWindow {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             let send_label = RichText::new(format!("{}  Send", ic::PAPER_PLANE_RIGHT)).color(pal.accent_text).size(13.5);
-            let send = ui.add(egui::Button::new(send_label).fill(pal.accent).corner_radius(egui::CornerRadius { nw: 6, sw: 6, ne: 0, se: 0 }).min_size(Vec2::new(78.0, 28.0)));
+            let send = ui.add(
+                egui::Button::new(send_label)
+                    .fill(pal.accent)
+                    .corner_radius(egui::CornerRadius { nw: 6, sw: 6, ne: 0, se: 0 })
+                    .min_size(Vec2::new(78.0, 28.0)),
+            );
             if send.on_hover_text("Send (Ctrl+Shift+D)").clicked() {
                 self.send(cx, None, 0);
             }
             ui.add_space(-3.0);
-            let more = ui.add(egui::Button::new(RichText::new(ic::CARET_DOWN).color(pal.accent_text).size(12.0)).fill(pal.accent.gamma_multiply(0.85)).corner_radius(egui::CornerRadius { nw: 0, sw: 0, ne: 6, se: 6 }).min_size(Vec2::new(24.0, 28.0)));
+            let more = ui.add(
+                egui::Button::new(RichText::new(ic::CARET_DOWN).color(pal.accent_text).size(12.0))
+                    .fill(pal.accent.gamma_multiply(0.85))
+                    .corner_radius(egui::CornerRadius { nw: 0, sw: 0, ne: 6, se: 6 })
+                    .min_size(Vec2::new(24.0, 28.0)),
+            );
             egui::Popup::menu(&more).show(|ui| {
                 ui.set_min_width(200.0);
                 if ui.add(egui::Button::new("Send Now").shortcut_text("Ctrl+Shift+D")).clicked() {
@@ -701,17 +784,17 @@ impl ComposeWindow {
                     ui.close();
                 }
                 ui.separator();
-                if let Some(t) = send_later::tonight_at(21) {
-                    if ui.button("Send 21:00 Tonight").clicked() {
-                        self.send(cx, Some(t), 0);
-                        ui.close();
-                    }
+                if let Some(t) = send_later::tonight_at(21)
+                    && ui.button("Send 21:00 Tonight").clicked()
+                {
+                    self.send(cx, Some(t), 0);
+                    ui.close();
                 }
-                if let Some(t) = send_later::tomorrow_at(8) {
-                    if ui.button("Send 8:00 Tomorrow").clicked() {
-                        self.send(cx, Some(t), 0);
-                        ui.close();
-                    }
+                if let Some(t) = send_later::tomorrow_at(8)
+                    && ui.button("Send 8:00 Tomorrow").clicked()
+                {
+                    self.send(cx, Some(t), 0);
+                    ui.close();
                 }
                 if ui.button("Send Later…").clicked() {
                     self.picker = SendLaterPicker::default();
@@ -727,7 +810,16 @@ impl ComposeWindow {
                 self.insert_photo(cx);
             }
             ui.add_space(8.0);
-            let fmt = richtext::fmt_button(ui, ic::TEXT_AA, if self.show_format_bar { "Hide Format Bar" } else { "Show Format Bar" }, self.show_format_bar && !self.editor.plain);
+            let fmt = ui
+                .add_enabled_ui(!redirect, |ui| {
+                    richtext::fmt_button(
+                        ui,
+                        ic::TEXT_AA,
+                        if self.show_format_bar { "Hide Format Bar" } else { "Show Format Bar" },
+                        self.show_format_bar && !self.editor.plain,
+                    )
+                })
+                .inner;
             if fmt.clicked() && !redirect {
                 if self.editor.plain {
                     self.editor.set_plain(false);
@@ -818,7 +910,11 @@ impl ComposeWindow {
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if self.priority != Priority::Normal {
-                    let (txt, col) = if self.priority == Priority::High { ("High Priority", pal.danger) } else { ("Low Priority", pal.text_secondary) };
+                    let (txt, col) = if self.priority == Priority::High {
+                        ("High Priority", pal.danger)
+                    } else {
+                        ("Low Priority", pal.text_secondary)
+                    };
                     ui.label(RichText::new(txt).size(12.0).color(col));
                 }
                 if self.request_receipt {
@@ -831,19 +927,26 @@ impl ComposeWindow {
     /// One header row: right-aligned label column + content, followed by a separator.
     fn header_row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
         let pal = Palette::of(ui.ctx());
-        egui::Frame::new().inner_margin(egui::Margin { left: 8, right: 14, top: 5, bottom: 5 }).show(ui, |ui| {
-            ui.with_layout(Layout::left_to_right(Align::TOP), |ui| {
-                ui.allocate_ui_with_layout(Vec2::new(LABEL_W, 24.0), Layout::right_to_left(Align::Center), |ui| {
-                    ui.set_min_size(Vec2::new(LABEL_W, 24.0));
-                    ui.label(RichText::new(label).size(13.0).color(pal.text_secondary));
-                });
-                ui.add_space(8.0);
-                ui.vertical(|ui| {
-                    ui.set_min_height(24.0);
-                    add(ui);
+        egui::Frame::new()
+            .inner_margin(egui::Margin {
+                left: 8,
+                right: 14,
+                top: 5,
+                bottom: 5,
+            })
+            .show(ui, |ui| {
+                ui.with_layout(Layout::left_to_right(Align::TOP), |ui| {
+                    ui.allocate_ui_with_layout(Vec2::new(LABEL_W, 24.0), Layout::right_to_left(Align::Center), |ui| {
+                        ui.set_min_size(Vec2::new(LABEL_W, 24.0));
+                        ui.label(RichText::new(label).size(13.0).color(pal.text_secondary));
+                    });
+                    ui.add_space(8.0);
+                    ui.vertical(|ui| {
+                        ui.set_min_height(24.0);
+                        add(ui);
+                    });
                 });
             });
-        });
         widgets::hline(ui);
     }
 
@@ -852,14 +955,19 @@ impl ComposeWindow {
         let settings = cx.settings.read().clone();
         let style = TokenStyle {
             show_addresses: settings.composing.show_addresses_not_names,
-            mark_not_ending_with: (settings.composing.mark_addresses_enabled && !settings.composing.mark_addresses_not_ending_with.trim().is_empty()).then(|| settings.composing.mark_addresses_not_ending_with.clone()),
+            mark_not_ending_with: (settings.composing.mark_addresses_enabled && !settings.composing.mark_addresses_not_ending_with.trim().is_empty())
+                .then(|| settings.composing.mark_addresses_not_ending_with.clone()),
         };
         let redirect = self.is_redirect();
         ui.add_space(4.0);
         if redirect {
             egui::Frame::new().fill(pal.warning_bg).inner_margin(egui::Margin::symmetric(16, 8)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.label(RichText::new(format!("{}  Redirect: the message is sent unchanged. Replies go to the original sender.", ic::ARROW_ELBOW_RIGHT)).size(12.5).color(if pal.dark { pal.text } else { Color32::from_rgb(0x6b, 0x4e, 0x00) }));
+                ui.label(
+                    RichText::new(format!("{}  Redirect: the message is sent unchanged. Replies go to the original sender.", ic::ARROW_ELBOW_RIGHT))
+                        .size(12.5)
+                        .color(if pal.dark { pal.text } else { Color32::from_rgb(0x6b, 0x4e, 0x00) }),
+                );
             });
         }
         let mut changed_to = false;
@@ -881,7 +989,14 @@ impl ComposeWindow {
         }
         if !redirect {
             Self::header_row(ui, "Subject:", |ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.subject).id(egui::Id::new(("compose-subject", self.id))).frame(egui::Frame::NONE).desired_width(f32::INFINITY).margin(egui::Margin { left: 2, right: 2, top: 4, bottom: 2 }).font(egui::FontId::proportional(14.0)));
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.subject)
+                        .id(egui::Id::new(("compose-subject", self.id)))
+                        .frame(egui::Frame::NONE)
+                        .desired_width(f32::INFINITY)
+                        .margin(egui::Margin { left: 2, right: 2, top: 4, bottom: 2 })
+                        .font(egui::FontId::proportional(14.0)),
+                );
             });
         } else {
             Self::header_row(ui, "Subject:", |ui| {
@@ -901,17 +1016,24 @@ impl ComposeWindow {
                 if choices.is_empty() {
                     ui.label(RichText::new("No account configured").color(pal.danger));
                 } else {
-                    egui::ComboBox::from_id_salt(("compose-from", id)).width(300.0).selected_text(choices.get(from_idx).cloned().unwrap_or_default()).show_ui(ui, |ui| {
-                        for (i, c) in choices.iter().enumerate() {
-                            if ui.selectable_label(i == from_idx, c).clicked() {
-                                new_from = Some(i);
+                    egui::ComboBox::from_id_salt(("compose-from", id))
+                        .width(300.0)
+                        .selected_text(choices.get(from_idx).cloned().unwrap_or_default())
+                        .show_ui(ui, |ui| {
+                            for (i, c) in choices.iter().enumerate() {
+                                if ui.selectable_label(i == from_idx, c).clicked() {
+                                    new_from = Some(i);
+                                }
                             }
-                        }
-                    });
+                        });
                 }
                 if !redirect {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let current = cur_sig.as_ref().and_then(|s| sigs.iter().find(|(i, _)| i == s)).map(|(_, n)| n.clone()).unwrap_or_else(|| "None".into());
+                        let current = cur_sig
+                            .as_ref()
+                            .and_then(|s| sigs.iter().find(|(i, _)| i == s))
+                            .map(|(_, n)| n.clone())
+                            .unwrap_or_else(|| "None".into());
                         egui::ComboBox::from_id_salt(("compose-sig", id)).width(130.0).selected_text(current).show_ui(ui, |ui| {
                             if ui.selectable_label(cur_sig.is_none(), "None").clicked() {
                                 new_sig = Some(None);
@@ -930,23 +1052,25 @@ impl ComposeWindow {
         if let Some(i) = new_from {
             self.set_from(&settings, i);
         }
-        if let Some(s) = new_sig {
-            if s != self.signature_id {
-                self.set_signature(&settings, s);
-            }
+        if let Some(s) = new_sig
+            && s != self.signature_id
+        {
+            self.set_signature(&settings, s);
         }
         if self.show_priority {
             Self::header_row(ui, "Priority:", |ui| {
-                egui::ComboBox::from_id_salt(("compose-prio", id)).width(120.0).selected_text(match self.priority {
-                    Priority::High => "High",
-                    Priority::Normal => "Normal",
-                    Priority::Low => "Low",
-                })
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.priority, Priority::High, "High");
-                    ui.selectable_value(&mut self.priority, Priority::Normal, "Normal");
-                    ui.selectable_value(&mut self.priority, Priority::Low, "Low");
-                });
+                egui::ComboBox::from_id_salt(("compose-prio", id))
+                    .width(120.0)
+                    .selected_text(match self.priority {
+                        Priority::High => "High",
+                        Priority::Normal => "Normal",
+                        Priority::Low => "Low",
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.priority, Priority::High, "High");
+                        ui.selectable_value(&mut self.priority, Priority::Normal, "Normal");
+                        ui.selectable_value(&mut self.priority, Priority::Low, "Low");
+                    });
             });
         }
         let _ = changed_to;
@@ -955,11 +1079,17 @@ impl ComposeWindow {
     fn body(&mut self, ui: &mut Ui, attachments_at_end: bool) {
         let pal = Palette::of(ui.ctx());
         let rgb = |c: Rgb| Color32::from_rgb(c[0], c[1], c[2]);
-        let tint = self.background.filter(|_| !self.editor.plain).map(|c| {
-            if pal.dark { pal.viewer_bg.lerp_to_gamma(rgb(self.accent.unwrap_or(c)), 0.10) } else { rgb(c) }
-        });
+        let tint = self
+            .background
+            .filter(|_| !self.editor.plain)
+            .map(|c| if pal.dark { pal.viewer_bg.lerp_to_gamma(rgb(self.accent.unwrap_or(c)), 0.10) } else { rgb(c) });
         let avail = ui.available_height();
-        let frame = egui::Frame::new().fill(tint.unwrap_or(Color32::TRANSPARENT)).inner_margin(egui::Margin { left: 22, right: 22, top: 16, bottom: 16 });
+        let frame = egui::Frame::new().fill(tint.unwrap_or(Color32::TRANSPARENT)).inner_margin(egui::Margin {
+            left: 22,
+            right: 22,
+            top: 16,
+            bottom: 16,
+        });
         frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
             let att_h = if attachments_at_end && !self.attachments.is_empty() { 80.0 } else { 0.0 };
@@ -984,9 +1114,19 @@ impl ComposeWindow {
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
             } else {
                 let d = self.editor.doc();
-                let words: usize = d.para_ranges().iter().enumerate().filter(|(i, _)| d.paras()[*i].quote == 0).map(|(_, r)| d.slice(r.clone()).split_whitespace().count()).sum();
+                let words: usize = d
+                    .para_ranges()
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| d.paras()[*i].quote == 0)
+                    .map(|(_, r)| d.slice(r.clone()).split_whitespace().count())
+                    .sum();
                 let mode = if self.editor.plain { "Plain Text" } else { "Rich Text" };
-                ui.label(RichText::new(format!("{words} {} · {mode}", if words == 1 { "word" } else { "words" })).size(12.0).color(pal.text_tertiary));
+                ui.label(
+                    RichText::new(format!("{words} {} · {mode}", if words == 1 { "word" } else { "words" }))
+                        .size(12.0)
+                        .color(pal.text_tertiary),
+                );
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 attachments::size_summary(ui, &self.attachments);
@@ -1023,7 +1163,13 @@ impl ComposeWindow {
             Dialog::SaveDraft => {
                 egui::Modal::new(mid).show(ctx, |ui| {
                     ui.set_width(400.0);
-                    heading(ui, ic::FLOPPY_DISK, pal.accent, "Do you want to save this message as a draft?", "If you don't save it, your changes will be lost.");
+                    heading(
+                        ui,
+                        ic::FLOPPY_DISK,
+                        pal.accent,
+                        "Do you want to save this message as a draft?",
+                        "If you don't save it, your changes will be lost.",
+                    );
                     ui.horizontal(|ui| {
                         if ui.add(egui::Button::new("Don't Save").min_size(Vec2::new(90.0, 26.0))).clicked() {
                             outcome = Outcome::DiscardAndClose;
@@ -1050,7 +1196,13 @@ impl ComposeWindow {
                     });
                 });
             }
-            Dialog::Confirm { title, message, ok, next_step, send_at } => {
+            Dialog::Confirm {
+                title,
+                message,
+                ok,
+                next_step,
+                send_at,
+            } => {
                 let (step, at) = (*next_step, *send_at);
                 egui::Modal::new(mid).show(ctx, |ui| {
                     ui.set_width(400.0);

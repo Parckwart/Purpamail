@@ -208,11 +208,11 @@ impl RichTextEditor {
                 }
                 let plain_text = html::to_plain(d);
                 *d = html::from_plain(&plain_text);
-                if let Some(last) = sig_text_ranges.last() {
-                    if let Some(pos) = plain_text.rfind(last.as_str()) {
-                        let start = plain_text[..pos].chars().count();
-                        d.update_styles(start, start + last.chars().count(), |s| s.signature = true);
-                    }
+                if let Some(last) = sig_text_ranges.last()
+                    && let Some(pos) = plain_text.rfind(last.as_str())
+                {
+                    let start = plain_text[..pos].chars().count();
+                    d.update_styles(start, start + last.chars().count(), |s| s.signature = true);
                 }
             });
         }
@@ -231,7 +231,10 @@ impl RichTextEditor {
     pub fn insert_image(&mut self, cid: &str, bytes: Vec<u8>) {
         self.add_image(cid, bytes);
         let sel = self.sel.clone();
-        let st = Style { image: Some(cid.to_string()), ..Default::default() };
+        let st = Style {
+            image: Some(cid.to_string()),
+            ..Default::default()
+        };
         self.edit(|d| d.replace(sel.start, sel.end, &OBJ.to_string(), &st));
         let p = sel.start + 1;
         self.set_selection(p..p);
@@ -261,12 +264,23 @@ impl RichTextEditor {
             Some((p, s)) if *p == pos => s.clone(),
             _ => self.doc.insertion_style(pos),
         };
-        if self.plain { Style { signature: st.signature, ..Default::default() } } else { st }
+        if self.plain {
+            Style {
+                signature: st.signature,
+                ..Default::default()
+            }
+        } else {
+            st
+        }
     }
 
     /// Is `attr` active for the selection / insertion point?
     pub fn is_active(&self, attr: &Attr) -> bool {
-        if self.sel.is_empty() { attr.is_set(&self.insertion_style(self.sel.start)) } else { self.doc.range_has(self.sel.start, self.sel.end, attr) }
+        if self.sel.is_empty() {
+            attr.is_set(&self.insertion_style(self.sel.start))
+        } else {
+            self.doc.range_has(self.sel.start, self.sel.end, attr)
+        }
     }
 
     /// Toggle / set a character attribute on the selection, or on the
@@ -327,7 +341,12 @@ impl RichTextEditor {
         }
         let sel = self.sel.clone();
         let existing = self.doc.style_at(sel.start).link.unwrap_or_default();
-        self.link_dialog = Some(LinkDialog { text: self.doc.slice(sel.clone()).to_string(), range: sel, url: existing, focus: true });
+        self.link_dialog = Some(LinkDialog {
+            text: self.doc.slice(sel.clone()).to_string(),
+            range: sel,
+            url: existing,
+            focus: true,
+        });
     }
 
     /// Insert a document at the cursor (replacing the selection).
@@ -341,7 +360,10 @@ impl RichTextEditor {
     // ------------------------------------------------------------------ undo
 
     fn push_undo(&mut self) {
-        self.undo.push(Snapshot { doc: self.doc.clone(), sel: self.sel.clone() });
+        self.undo.push(Snapshot {
+            doc: self.doc.clone(),
+            sel: self.sel.clone(),
+        });
         if self.undo.len() > 200 {
             self.undo.remove(0);
         }
@@ -357,7 +379,10 @@ impl RichTextEditor {
 
     pub fn undo(&mut self) {
         if let Some(s) = self.undo.pop() {
-            self.redo.push(Snapshot { doc: std::mem::replace(&mut self.doc, s.doc), sel: self.sel.clone() });
+            self.redo.push(Snapshot {
+                doc: std::mem::replace(&mut self.doc, s.doc),
+                sel: self.sel.clone(),
+            });
             self.set_selection(s.sel);
             self.version += 1;
             self.last_edit = f64::NEG_INFINITY;
@@ -366,7 +391,10 @@ impl RichTextEditor {
 
     pub fn redo(&mut self) {
         if let Some(s) = self.redo.pop() {
-            self.undo.push(Snapshot { doc: std::mem::replace(&mut self.doc, s.doc), sel: self.sel.clone() });
+            self.undo.push(Snapshot {
+                doc: std::mem::replace(&mut self.doc, s.doc),
+                sel: self.sel.clone(),
+            });
             self.set_selection(s.sel);
             self.version += 1;
             self.last_edit = f64::NEG_INFINITY;
@@ -382,15 +410,20 @@ impl RichTextEditor {
         std::hash::Hash::hash(text, &mut h);
         std::hash::Hash::hash(&self.ignored.len(), &mut h);
         let key = std::hash::Hasher::finish(&h);
-        if let Some((k, v)) = &self.spell_cache {
-            if *k == key {
-                return v.clone();
-            }
+        if let Some((k, v)) = &self.spell_cache
+            && *k == key
+        {
+            return v.clone();
         }
         let spell = SPELL.lock();
         let mut out = Vec::new();
         if spell.is_available() {
-            let byte_to_char: HashMap<usize, usize> = text.char_indices().enumerate().map(|(ci, (b, _))| (b, ci)).chain(std::iter::once((text.len(), text.chars().count()))).collect();
+            let byte_to_char: HashMap<usize, usize> = text
+                .char_indices()
+                .enumerate()
+                .map(|(ci, (b, _))| (b, ci))
+                .chain(std::iter::once((text.len(), text.chars().count())))
+                .collect();
             for (b0, b1) in spell.misspelled(text) {
                 let (Some(&c0), Some(&c1)) = (byte_to_char.get(&b0), byte_to_char.get(&b1)) else { continue };
                 let word = &text[b0..b1];
@@ -489,7 +522,14 @@ impl RichTextEditor {
                     Some((p, s)) if *p == pos => s.clone(),
                     _ => d.insertion_style(pos),
                 };
-                if plain { Style { signature: st.signature, ..Default::default() } } else { st }
+                if plain {
+                    Style {
+                        signature: st.signature,
+                        ..Default::default()
+                    }
+                } else {
+                    st
+                }
             };
             let mut layouter = |ui: &Ui, text: &dyn egui::TextBuffer, wrap: f32| {
                 let t = text.as_str();
@@ -504,7 +544,11 @@ impl RichTextEditor {
                     layout::layout_doc(ui, &tmp, &lp, images, wrap)
                 }
             };
-            let te = if self.read_only { egui::TextEdit::multiline(&mut ro_text) } else { egui::TextEdit::multiline(&mut buf) };
+            let te = if self.read_only {
+                egui::TextEdit::multiline(&mut ro_text)
+            } else {
+                egui::TextEdit::multiline(&mut buf)
+            };
             te.id(id)
                 .frame(egui::Frame::NONE)
                 .desired_width(f32::INFINITY)
@@ -558,10 +602,10 @@ impl RichTextEditor {
             let s = r.as_sorted_char_range();
             let new_sel = s.start.0.min(self.doc.char_len())..s.end.0.min(self.doc.char_len());
             if new_sel != self.sel {
-                if let Some((p, _)) = &self.pending {
-                    if !(new_sel.is_empty() && new_sel.start == *p) {
-                        self.pending = None;
-                    }
+                if let Some((p, _)) = &self.pending
+                    && !(new_sel.is_empty() && new_sel.start == *p)
+                {
+                    self.pending = None;
                 }
                 self.sel = new_sel;
             }
@@ -582,11 +626,11 @@ impl RichTextEditor {
             layout::paint_decorations(ui, &self.doc, &lp, &self.images, &output.galley, output.galley_pos, &misspelled);
         }
         // context menu
-        if response.secondary_clicked() {
-            if let Some(pos) = response.interact_pointer_pos() {
-                let c = output.galley.cursor_from_pos(pos - output.galley_pos);
-                self.context_char = Some(c.index.0);
-            }
+        if response.secondary_clicked()
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            let c = output.galley.cursor_from_pos(pos - output.galley_pos);
+            self.context_char = Some(c.index.0);
         }
         if !self.read_only {
             response.context_menu(|ui| self.context_menu(ui, &misspelled));
@@ -797,7 +841,11 @@ impl RichTextEditor {
                 self.color_menu(ui, true, cur.highlight);
                 sep(ui, &pal);
                 let para = self.current_para();
-                for (a, icon, tip) in [(Align::Left, ic::TEXT_ALIGN_LEFT, "Align Left"), (Align::Center, ic::TEXT_ALIGN_CENTER, "Center"), (Align::Right, ic::TEXT_ALIGN_RIGHT, "Align Right")] {
+                for (a, icon, tip) in [
+                    (Align::Left, ic::TEXT_ALIGN_LEFT, "Align Left"),
+                    (Align::Center, ic::TEXT_ALIGN_CENTER, "Center"),
+                    (Align::Right, ic::TEXT_ALIGN_RIGHT, "Align Right"),
+                ] {
                     if fmt_button(ui, icon, tip, para.align == a).clicked() {
                         self.set_align(a);
                     }
@@ -842,7 +890,12 @@ impl RichTextEditor {
                     let (rect, r) = ui.allocate_exact_size(Vec2::splat(22.0), egui::Sense::click());
                     let fill = Color32::from_rgb(c[0], c[1], c[2]);
                     ui.painter().rect_filled(rect, 5.0, fill);
-                    ui.painter().rect_stroke(rect, 5.0, egui::Stroke::new(if current == Some(*c) { 2.0 } else { 1.0 }, if current == Some(*c) { pal.accent } else { pal.separator }), egui::StrokeKind::Inside);
+                    ui.painter().rect_stroke(
+                        rect,
+                        5.0,
+                        egui::Stroke::new(if current == Some(*c) { 2.0 } else { 1.0 }, if current == Some(*c) { pal.accent } else { pal.separator }),
+                        egui::StrokeKind::Inside,
+                    );
                     if r.clicked() {
                         self.apply(if highlight { Attr::Highlight(Some(*c)) } else { Attr::Color(Some(*c)) });
                         ui.close();
@@ -870,12 +923,16 @@ impl RichTextEditor {
     /// Format bar plus editor in a framed box (for preferences panes).
     pub fn ui_with_toolbar(&mut self, ui: &mut Ui) -> Response {
         let pal = Palette::of(ui.ctx());
-        egui::Frame::new().fill(pal.field_bg).stroke(egui::Stroke::new(1.0, pal.separator)).corner_radius(6.0).show(ui, |ui| {
-            egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 4)).show(ui, |ui| self.format_bar(ui));
-            crate::ui::widgets::hline(ui);
-            egui::Frame::new().inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| self.ui(ui)).inner
-        })
-        .inner
+        egui::Frame::new()
+            .fill(pal.field_bg)
+            .stroke(egui::Stroke::new(1.0, pal.separator))
+            .corner_radius(6.0)
+            .show(ui, |ui| {
+                egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 4)).show(ui, |ui| self.format_bar(ui));
+                crate::ui::widgets::hline(ui);
+                egui::Frame::new().inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| self.ui(ui)).inner
+            })
+            .inner
     }
 }
 
