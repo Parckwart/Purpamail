@@ -497,9 +497,7 @@ impl PurpamailApp {
     }
 
     fn build_rows(&self, msgs: Vec<MessageSummary>, threaded: bool, s: &Settings) -> Vec<ListRow> {
-        let highlight_of = |id: MessageId| -> Option<FlagColor> {
-            self.store.kv_get(&format!("highlight:{id}")).and_then(|c| FlagColor::ALL.iter().find(|f| f.name() == c).copied())
-        };
+        let highlight_of = |id: MessageId| rules::highlight_color(&self.store, id);
         let mk = |m: MessageSummary, count: usize, unread: bool, flag: Option<Option<FlagColor>>, child: bool| ListRow {
             vip: self.vips.contains(&m.from.email.to_lowercase()),
             muted: self.muted.contains(&m.thread_id),
