@@ -263,7 +263,7 @@ impl PurpamailApp {
 
     /// Files dropped on the main window: messages are opened, mailboxes imported.
     fn handle_dropped_files(&mut self, ctx: &egui::Context) {
-        let files: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
+        let files: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
         if files.is_empty() {
             return;
         }
