@@ -20,24 +20,6 @@ pub(super) fn parse_event(ics_text: &str) -> Option<CalendarEvent> {
     ics::parse(ics_text).filter(|e| !e.summary.trim().is_empty() || e.start.is_some())
 }
 
-/// Human readable time range of an event in local time.
-fn event_time(ev: &CalendarEvent) -> String {
-    use chrono::{DateTime, Duration, Local};
-    let Some(start) = ev.start.and_then(|s| DateTime::from_timestamp(s, 0)).map(|d| d.with_timezone(&Local)) else { return String::new() };
-    let end = ev.end.and_then(|e| DateTime::from_timestamp(e, 0)).map(|d| d.with_timezone(&Local));
-    if ev.all_day {
-        let last = end.map(|e| e - Duration::days(1)).filter(|e| e.date_naive() > start.date_naive());
-        return match last {
-            Some(l) => format!("{} – {} (all day)", start.format("%-d %B %Y"), l.format("%-d %B %Y")),
-            None => format!("{} (all day)", start.format("%A, %-d %B %Y")),
-        };
-    }
-    match end {
-        Some(e) if e.date_naive() == start.date_naive() => format!("{}, {} – {}", start.format("%A, %-d %B %Y"), start.format("%H:%M"), e.format("%H:%M")),
-        Some(e) => format!("{} – {}", start.format("%-d %b %Y, %H:%M"), e.format("%-d %b %Y, %H:%M")),
-        None => format!("{}, {}", start.format("%A, %-d %B %Y"), start.format("%H:%M")),
-    }
-}
 
 /// A banner button.
 struct Btn<'a> {
@@ -178,7 +160,7 @@ impl MessageViewer {
                     let title = if ev.summary.trim().is_empty() { "Event" } else { ev.summary.as_str() };
                     let title_rt = RichText::new(title).size(15.0).family(crate::ui::fonts::bold()).color(pal.text);
                     ui.add(egui::Label::new(if cancelled { title_rt.strikethrough() } else { title_rt }).wrap());
-                    let when = event_time(ev);
+                    let when = ics::format_event_time(ev);
                     if !when.is_empty() {
                         ui.label(RichText::new(format!("{}  {when}", ic::CLOCK)).size(12.5).color(pal.text_secondary));
                     }
@@ -272,7 +254,7 @@ impl MessageViewer {
                     texts.push(body);
                 }
             }
-            let s = summary::summarize(&texts.join("\n\n"), 4);
+            let s = summary::summarize_thread(&texts, 4);
             self.thread_summary = Some((thread, msgs.len(), s));
         }
         let text = self.thread_summary.as_ref().filter(|(t, _, _)| *t == thread).map(|(_, _, s)| s.clone());

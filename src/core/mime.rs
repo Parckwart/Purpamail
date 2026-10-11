@@ -140,7 +140,7 @@ pub fn parse(raw: &[u8]) -> Option<ParsedMessage> {
         }
     }
 
-    let texts: Vec<String> = msg.text_bodies().filter_map(|part| part.text_contents().map(|t| t.to_string())).collect();
+    let texts: Vec<String> = msg.text_bodies().filter(|part| !part.is_text_html()).filter_map(|part| part.text_contents().map(|t| t.to_string())).collect();
     let htmls: Vec<String> = msg
         .html_bodies()
         .filter(|part| part.is_text_html())
@@ -474,6 +474,15 @@ mod tests {
         assert_eq!(p.priority, Priority::High);
         let s = summarize(&p, raw.len());
         assert_eq!(s.snippet, "Hello Bob Bye");
+    }
+
+    #[test]
+    fn html_only_message_has_no_plain_part() {
+        let raw = b"From: a@b.c\r\nSubject: x\r\nContent-Type: text/html\r\n\r\n<!DOCTYPE html><html><body><p>Hello <b>there</b></p></body></html>\r\n";
+        let p = parse(raw).unwrap();
+        assert!(p.text.is_none());
+        assert_eq!(p.plain_text(), "Hello there");
+        assert_eq!(summarize(&p, raw.len()).snippet, "Hello there");
     }
 
     #[test]
