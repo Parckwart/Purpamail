@@ -241,7 +241,10 @@ impl Drop for ActivityTracker {
 #[derive(Debug, Clone, PartialEq)]
 enum WorkerMsg {
     /// Check for new mail; `full` reconciles every mailbox, `user` bypasses connection backoff.
-    Check { full: bool, user: bool },
+    Check {
+        full: bool,
+        user: bool,
+    },
     SyncMailbox(MailboxId),
     FetchBody(MessageId),
     FlushOps,
@@ -271,10 +274,9 @@ fn enqueue(queue: &mut VecDeque<WorkerMsg>, msg: WorkerMsg) {
                 }
             }
         }
-        WorkerMsg::IdleChanged | WorkerMsg::FlushOps | WorkerMsg::FetchBody(_) | WorkerMsg::SyncMailbox(_)
-            if queue.contains(&msg) => {
-                return;
-            }
+        WorkerMsg::IdleChanged | WorkerMsg::FlushOps | WorkerMsg::FetchBody(_) | WorkerMsg::SyncMailbox(_) if queue.contains(&msg) => {
+            return;
+        }
         _ => {}
     }
     queue.push_back(msg);
@@ -493,11 +495,10 @@ impl Coordinator {
                 (Some(cfg), Some(w)) => *cfg == w.config && w.secrets == (secrets.incoming(&id), secrets.outgoing(cfg)),
                 _ => false,
             };
-            if !keep
-                && let Some(w) = self.workers.remove(&id) {
-                    log::info!("engine: stopping worker for {id}");
-                    let _ = w.tx.send(WorkerMsg::Shutdown);
-                }
+            if !keep && let Some(w) = self.workers.remove(&id) {
+                log::info!("engine: stopping worker for {id}");
+                let _ = w.tx.send(WorkerMsg::Shutdown);
+            }
         }
         for (id, cfg) in wanted {
             if self.workers.contains_key(&id) {
@@ -517,12 +518,13 @@ impl Coordinator {
         let now = Instant::now();
         let freq = self.ctx.settings.read().general.check_frequency;
         if let Some(secs) = freq.seconds()
-            && now.duration_since(self.last_check) >= Duration::from_secs(secs) {
-                self.last_check = now;
-                for w in self.workers.values().filter(|w| w.config.include_when_checking) {
-                    let _ = w.tx.send(WorkerMsg::Check { full: false, user: false });
-                }
+            && now.duration_since(self.last_check) >= Duration::from_secs(secs)
+        {
+            self.last_check = now;
+            for w in self.workers.values().filter(|w| w.config.include_when_checking) {
+                let _ = w.tx.send(WorkerMsg::Check { full: false, user: false });
             }
+        }
         if now.duration_since(self.last_outbox) >= OUTBOX_INTERVAL {
             self.last_outbox = now;
             let _ = self.ctx.send_jobs.send(SendJob::Flush { user: false });
@@ -822,7 +824,8 @@ impl Worker {
             drop_ops(&self.ctx.store, &self.acct.id);
             return;
         }
-        if !self.online || self.ctx.store.pending_ops(&self.acct.id).is_empty() {
+        // While the server is unreachable the scheduled retry replays the queue.
+        if !self.online || self.backoff.waiting() || self.ctx.store.pending_ops(&self.acct.id).is_empty() {
             return;
         }
         let _ = self.with_imap(|s| s.flush_ops());
@@ -903,16 +906,19 @@ impl Worker {
         let store = self.ctx.store.clone();
         let inbox = match store.mailbox_by_role(&self.acct.id, MailboxRole::Inbox) {
             Some(m) => m.id,
-            None => match store.ensure_mailbox(&self.acct.id, "INBOX", MailboxRole::Inbox).and_then(|id| store.set_mailbox_role(id, MailboxRole::Inbox).map(|_| id)) {
-                Ok(id) => {
-                    self.ctx.emit(Event::MailboxesChanged(self.acct.id.clone()));
-                    id
+            None => {
+                match store.ensure_mailbox(&self.acct.id, "INBOX", MailboxRole::Inbox).and_then(|id| store.set_mailbox_role(id, MailboxRole::Inbox).map(|_| id))
+                {
+                    Ok(id) => {
+                        self.ctx.emit(Event::MailboxesChanged(self.acct.id.clone()));
+                        id
+                    }
+                    Err(e) => {
+                        log::error!("pop3: cannot create inbox: {e}");
+                        return;
+                    }
                 }
-                Err(e) => {
-                    log::error!("pop3: cannot create inbox: {e}");
-                    return;
-                }
-            },
+            }
         };
         drop_ops(&store, &self.acct.id);
         let password = self.password();
@@ -1243,7 +1249,11 @@ impl<'a> ImapSync<'a> {
                     log::warn!("{}: {op:?} failed: {e}", self.acct.display_name());
                     if attempts + 1 >= MAX_OP_ATTEMPTS {
                         let _ = store.remove_op(op_id);
-                        self.ctx.emit(Event::Log(format!("{}: gave up on a change that could not be applied on the server ({}): {e}", self.acct.display_name(), describe_op(&op))));
+                        self.ctx.emit(Event::Log(format!(
+                            "{}: gave up on a change that could not be applied on the server ({}): {e}",
+                            self.acct.display_name(),
+                            describe_op(&op)
+                        )));
                     } else {
                         let _ = store.bump_op_attempts(op_id);
                     }
@@ -1427,9 +1437,10 @@ impl<'a> ImapSync<'a> {
         if !prefix.is_empty() {
             let mut pre = prefix.to_string();
             if let Some(d) = delim.as_deref()
-                && !pre.ends_with(d) {
-                    pre.push_str(d);
-                }
+                && !pre.ends_with(d)
+            {
+                pre.push_str(d);
+            }
             if !p.starts_with(&pre) && !p.eq_ignore_ascii_case(prefix) {
                 p = format!("{pre}{p}");
             }
@@ -1445,9 +1456,10 @@ impl<'a> ImapSync<'a> {
             Err(e) => return Err(e.into()),
         }
         if let Err(e) = self.c.subscribe(path)
-            && e.is_connection() {
-                return Err(e.into());
-            }
+            && e.is_connection()
+        {
+            return Err(e.into());
+        }
         self.mailboxes_changed = true;
         Ok(())
     }
@@ -1472,7 +1484,11 @@ impl<'a> ImapSync<'a> {
         let mut out = HashSet::new();
         for (_, op, _) in self.store().pending_ops(&self.acct.id) {
             match op {
-                RemoteOp::SetFlags { mailbox: m, uids, .. } | RemoteOp::SetColor { mailbox: m, uids, .. } | RemoteOp::Delete { mailbox: m, uids } if m == mailbox => out.extend(uids),
+                RemoteOp::SetFlags { mailbox: m, uids, .. } | RemoteOp::SetColor { mailbox: m, uids, .. } | RemoteOp::Delete { mailbox: m, uids }
+                    if m == mailbox =>
+                {
+                    out.extend(uids)
+                }
                 RemoteOp::Move { from, uids, .. } | RemoteOp::Copy { from, uids, .. } if from == mailbox => out.extend(uids),
                 _ => {}
             }
@@ -1491,7 +1507,11 @@ impl<'a> ImapSync<'a> {
         let mut protected_paths = HashSet::new();
         for (_, op, _) in store.pending_ops(&self.acct.id) {
             match op {
-                RemoteOp::SetFlags { mailbox, .. } | RemoteOp::SetColor { mailbox, .. } | RemoteOp::Delete { mailbox, .. } | RemoteOp::Append { mailbox, .. } | RemoteOp::Expunge { mailbox } => {
+                RemoteOp::SetFlags { mailbox, .. }
+                | RemoteOp::SetColor { mailbox, .. }
+                | RemoteOp::Delete { mailbox, .. }
+                | RemoteOp::Append { mailbox, .. }
+                | RemoteOp::Expunge { mailbox } => {
                     protected_ids.insert(mailbox);
                 }
                 RemoteOp::Move { from, to, .. } | RemoteOp::Copy { from, to, .. } => {
@@ -1553,9 +1573,10 @@ impl<'a> ImapSync<'a> {
             }
         }
         if !seen.contains_key("INBOX")
-            && let Ok(id) = store.ensure_mailbox(&self.acct.id, "INBOX", MailboxRole::Inbox) {
-                seen.insert("INBOX".into(), id);
-            }
+            && let Ok(id) = store.ensure_mailbox(&self.acct.id, "INBOX", MailboxRole::Inbox)
+        {
+            seen.insert("INBOX".into(), id);
+        }
         // Mailboxes that disappeared from the server.
         for mb in &before {
             if seen.contains_key(&mb.path) || protected_ids.contains(&mb.id) || protected_paths.contains(&mb.path) {
@@ -1586,9 +1607,10 @@ impl<'a> ImapSync<'a> {
             self.service_priority()?;
             while let Some(id) = self.take_sync_request() {
                 if done.insert(id)
-                    && let Some(m) = self.store().mailbox(id).filter(|m| m.selectable && m.account_id == self.acct.id) {
-                        self.sync_mailbox_logged(&m, false, false)?;
-                    }
+                    && let Some(m) = self.store().mailbox(id).filter(|m| m.selectable && m.account_id == self.acct.id)
+                {
+                    self.sync_mailbox_logged(&m, false, false)?;
+                }
             }
             if !done.insert(mb.id) {
                 continue;
@@ -1782,9 +1804,10 @@ impl<'a> ImapSync<'a> {
             let uids: Vec<u32> = batch.iter().map(|(u, _)| *u).collect();
             for it in self.c.fetch_bodies(&uids)? {
                 if let (Some(raw), Some((_, id))) = (it.body.as_deref(), batch.iter().find(|(u, _)| *u == it.uid))
-                    && store.raw(*id).is_none() {
-                        apply_body(store, *id, raw);
-                    }
+                    && store.raw(*id).is_none()
+                {
+                    apply_body(store, *id, raw);
+                }
             }
             fetched_bodies += batch.len();
             if let Some(a) = activity.as_mut() {
@@ -1844,7 +1867,14 @@ fn describe_op(op: &RemoteOp) -> String {
 
 /// Junk filter, blocked senders and rules for messages that just arrived in `inbox`.
 /// Returns the messages to announce (still in the Inbox, unread and not junk).
-fn process_new_mail(ctx: &Ctx, acct: &AccountConfig, inbox: MailboxId, ids: &[MessageId], headers: &HashMap<MessageId, Vec<u8>>, touched: &mut BTreeSet<MailboxId>) -> Vec<MessageId> {
+fn process_new_mail(
+    ctx: &Ctx,
+    acct: &AccountConfig,
+    inbox: MailboxId,
+    ids: &[MessageId],
+    headers: &HashMap<MessageId, Vec<u8>>,
+    touched: &mut BTreeSet<MailboxId>,
+) -> Vec<MessageId> {
     let store = &*ctx.store;
     let settings = ctx.settings();
     touched.insert(inbox);
@@ -1877,15 +1907,27 @@ fn addressed_with_full_name(m: &MessageSummary, acct: &AccountConfig) -> bool {
 }
 
 /// Apply the junk filter; returns the messages that stay in the Inbox.
-fn filter_junk(store: &Store, settings: &Settings, acct: &AccountConfig, ids: &[MessageId], parsed: &dyn Fn(MessageId) -> Option<ParsedMessage>, touched: &mut BTreeSet<MailboxId>) -> Vec<MessageId> {
+fn filter_junk(
+    store: &Store,
+    settings: &Settings,
+    acct: &AccountConfig,
+    ids: &[MessageId],
+    parsed: &dyn Fn(MessageId) -> Option<ParsedMessage>,
+    touched: &mut BTreeSet<MailboxId>,
+) -> Vec<MessageId> {
     let jp = &settings.junk;
     let contacts = if jp.exempt_sender_in_contacts { store.contact_emails() } else { HashSet::new() };
-    let previous: HashSet<String> = if jp.exempt_previous_recipients { store.previous_recipients().into_iter().map(|r| r.email.to_lowercase()).collect() } else { HashSet::new() };
+    let previous: HashSet<String> =
+        if jp.exempt_previous_recipients { store.previous_recipients().into_iter().map(|r| r.email.to_lowercase()).collect() } else { HashSet::new() };
     let mine: HashSet<String> = settings.my_addresses().into_iter().collect();
     let mut keep = Vec::new();
     for m in store.messages_by_ids(ids) {
         let from = m.from.email.to_lowercase();
-        let exempt = m.has(flags::NOT_JUNK) || mine.contains(&from) || contacts.contains(&from) || previous.contains(&from) || (jp.exempt_full_name_addressed && addressed_with_full_name(&m, acct));
+        let exempt = m.has(flags::NOT_JUNK)
+            || mine.contains(&from)
+            || contacts.contains(&from)
+            || previous.contains(&from)
+            || (jp.exempt_full_name_addressed && addressed_with_full_name(&m, acct));
         let is_junk = !exempt
             && (m.has(flags::JUNK)
                 || parsed(m.id).is_some_and(|p| (jp.trust_server_headers && junk::server_says_junk(&p)) || junk::score(store, &p) >= jp.threshold));
@@ -1898,15 +1940,17 @@ fn filter_junk(store: &Store, settings: &Settings, acct: &AccountConfig, ids: &[
             log::warn!("junk filter: {e}");
         }
         match jp.action {
-            JunkAction::MoveToJunk => match ops::role_mailbox(store, &m.account_id, MailboxRole::Junk).and_then(|jm| ops::move_to(store, &[m.id], jm.id).map(|_| jm.id)) {
-                Ok(jm) => {
-                    touched.insert(jm);
+            JunkAction::MoveToJunk => {
+                match ops::role_mailbox(store, &m.account_id, MailboxRole::Junk).and_then(|jm| ops::move_to(store, &[m.id], jm.id).map(|_| jm.id)) {
+                    Ok(jm) => {
+                        touched.insert(jm);
+                    }
+                    Err(e) => {
+                        log::warn!("junk filter: cannot move message: {e}");
+                        keep.push(m.id);
+                    }
                 }
-                Err(e) => {
-                    log::warn!("junk filter: cannot move message: {e}");
-                    keep.push(m.id);
-                }
-            },
+            }
             // Marked only (or left to custom rules): stays in the Inbox, flagged as junk.
             JunkAction::MarkOnly | JunkAction::Custom => keep.push(m.id),
         }
@@ -1966,13 +2010,7 @@ fn run_rule_command(store: &Store, command: &str, message: MessageId) {
     }
     let command = command.to_string();
     spawn_named("purpamail-rule-command", move || {
-        let status = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(&command)
-            .arg("purpamail-rule")
-            .arg(&path)
-            .stdin(std::process::Stdio::null())
-            .status();
+        let status = std::process::Command::new("sh").arg("-c").arg(&command).arg("purpamail-rule").arg(&path).stdin(std::process::Stdio::null()).status();
         match status {
             Ok(s) if !s.success() => log::warn!("rules: command “{command}” exited with {s}"),
             Err(e) => log::warn!("rules: cannot run “{command}”: {e}"),
@@ -1985,9 +2023,14 @@ fn run_rule_command(store: &Store, command: &str, message: MessageId) {
 // ------------------------------------------------------------------ Outbox sender
 
 enum SendJob {
-    Send { outbox_id: MessageId, message: Box<OutgoingMessage> },
+    Send {
+        outbox_id: MessageId,
+        message: Box<OutgoingMessage>,
+    },
     /// Deliver every due Outbox message; `user` ignores the retry backoff.
-    Flush { user: bool },
+    Flush {
+        user: bool,
+    },
     Shutdown,
 }
 

@@ -132,11 +132,7 @@ impl SmtpProbe {
 
     fn expect(&mut self, ok: &[u16]) -> NetResult<Vec<String>> {
         let (code, lines) = self.reply()?;
-        if ok.contains(&code) {
-            Ok(lines)
-        } else {
-            Err(NetError::No(format!("{code} {}", lines.join(" "))))
-        }
+        if ok.contains(&code) { Ok(lines) } else { Err(NetError::No(format!("{code} {}", lines.join(" ")))) }
     }
 
     fn ehlo(&mut self) -> NetResult<Vec<String>> {

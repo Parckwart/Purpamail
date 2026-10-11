@@ -9,7 +9,9 @@ use std::time::{Duration, Instant};
 
 use parking_lot::{Mutex, RwLock};
 use purpamail::core::compose::OutgoingMessage;
-use purpamail::core::config::{AccountConfig, AccountKind, AuthMethod, CheckFrequency, DownloadAttachments, Pop3Removal, Secrets, Security, ServerConfig, Settings};
+use purpamail::core::config::{
+    AccountConfig, AccountKind, AuthMethod, CheckFrequency, DownloadAttachments, Pop3Removal, Secrets, Security, ServerConfig, Settings,
+};
 use purpamail::core::model::*;
 use purpamail::core::ops;
 use purpamail::core::store::{MessageQuery, SharedStore, Store};
@@ -192,22 +194,24 @@ mod fake_imap {
             let mut line = line.trim_end_matches(['\r', '\n']).to_string();
             let mut literal: Option<Vec<u8>> = None;
             if line.ends_with('}')
-                && let Some(open) = line.rfind('{') {
-                    let spec = &line[open + 1..line.len() - 1];
-                    let plus = spec.ends_with('+');
-                    let n: usize = spec.trim_end_matches('+').parse().unwrap_or(0);
-                    if !plus {
-                        w.write_all(b"+ go ahead\r\n")?;
-                    }
-                    let mut buf = vec![0; n];
-                    r.read_exact(&mut buf)?;
-                    let mut rest = String::new();
-                    r.read_line(&mut rest)?;
-                    line = format!("{}{}", &line[..open], rest.trim_end());
-                    literal = Some(buf);
-                }
+                && let Some(open) = line.rfind('{')
             {
-                let shown = if line.to_ascii_uppercase().contains(" LOGIN ") { line.split(' ').take(3).collect::<Vec<_>>().join(" ") + " ***" } else { line.clone() };
+                let spec = &line[open + 1..line.len() - 1];
+                let plus = spec.ends_with('+');
+                let n: usize = spec.trim_end_matches('+').parse().unwrap_or(0);
+                if !plus {
+                    w.write_all(b"+ go ahead\r\n")?;
+                }
+                let mut buf = vec![0; n];
+                r.read_exact(&mut buf)?;
+                let mut rest = String::new();
+                r.read_line(&mut rest)?;
+                line = format!("{}{}", &line[..open], rest.trim_end());
+                literal = Some(buf);
+            }
+            {
+                let shown =
+                    if line.to_ascii_uppercase().contains(" LOGIN ") { line.split(' ').take(3).collect::<Vec<_>>().join(" ") + " ***" } else { line.clone() };
                 st.lock().commands.push(shown);
             }
             let (tag, rest) = line.split_once(' ').unwrap_or((line.as_str(), ""));
@@ -236,6 +240,24 @@ mod fake_imap {
                         out.extend_from_slice(format!("{tag} NO [AUTHENTICATIONFAILED] invalid credentials\r\n").as_bytes());
                     }
                 }
+                "AUTHENTICATE" if t.first().is_some_and(|m| m.eq_ignore_ascii_case("XOAUTH2")) => {
+                    use base64::Engine as _;
+                    // No SASL-IR advertised: the initial response follows a continuation.
+                    w.write_all(b"+ \r\n")?;
+                    let mut resp = String::new();
+                    r.read_line(&mut resp)?;
+                    let decoded = base64::engine::general_purpose::STANDARD.decode(resp.trim()).unwrap_or_default();
+                    let expected = format!("user=user\x01auth=Bearer {}\x01\x01", st.lock().password);
+                    if decoded == expected.as_bytes() {
+                        ok(&mut out, "authenticated");
+                    } else {
+                        // Error challenge, answered by an empty line, then NO.
+                        w.write_all(b"+ eyJzdGF0dXMiOiI0MDEifQ==\r\n")?;
+                        let mut empty = String::new();
+                        r.read_line(&mut empty)?;
+                        out.extend_from_slice(format!("{tag} NO [AUTHENTICATIONFAILED] invalid token\r\n").as_bytes());
+                    }
+                }
                 "NOOP" | "CHECK" | "SUBSCRIBE" => ok(&mut out, "done"),
                 "LOGOUT" => {
                     w.write_all(format!("* BYE bye\r\n{tag} OK logged out\r\n").as_bytes())?;
@@ -257,7 +279,15 @@ mod fake_imap {
                     let s = st.lock();
                     match s.mailboxes.get(&name) {
                         Some(mb) => {
-                            out.extend_from_slice(format!("* {} EXISTS\r\n* OK [UIDVALIDITY {}] ok\r\n* OK [UIDNEXT {}] ok\r\n* FLAGS (\\Seen \\Flagged)\r\n", mb.messages.len(), mb.uidvalidity, mb.uidnext).as_bytes());
+                            out.extend_from_slice(
+                                format!(
+                                    "* {} EXISTS\r\n* OK [UIDVALIDITY {}] ok\r\n* OK [UIDNEXT {}] ok\r\n* FLAGS (\\Seen \\Flagged)\r\n",
+                                    mb.messages.len(),
+                                    mb.uidvalidity,
+                                    mb.uidnext
+                                )
+                                .as_bytes(),
+                            );
                             selected = Some(name);
                             ok(&mut out, if cmd == "SELECT" { "[READ-WRITE] selected" } else { "[READ-ONLY] examined" });
                         }
@@ -270,7 +300,16 @@ mod fake_imap {
                     match s.mailboxes.get(&name) {
                         Some(mb) => {
                             let unseen = mb.messages.iter().filter(|m| !m.flags.iter().any(|f| f == "\\Seen")).count();
-                            out.extend_from_slice(format!("* STATUS {} (MESSAGES {} UIDNEXT {} UIDVALIDITY {} UNSEEN {unseen})\r\n", quote(&name), mb.messages.len(), mb.uidnext, mb.uidvalidity).as_bytes());
+                            out.extend_from_slice(
+                                format!(
+                                    "* STATUS {} (MESSAGES {} UIDNEXT {} UIDVALIDITY {} UNSEEN {unseen})\r\n",
+                                    quote(&name),
+                                    mb.messages.len(),
+                                    mb.uidnext,
+                                    mb.uidvalidity
+                                )
+                                .as_bytes(),
+                            );
                             ok(&mut out, "done");
                         }
                         None => out.extend_from_slice(format!("{tag} NO no such mailbox\r\n").as_bytes()),
@@ -339,8 +378,14 @@ mod fake_imap {
                     } else {
                         let src = selected.clone().unwrap_or_else(|| "INBOX".into());
                         let max = s.mb(&src).messages.iter().map(|m| m.uid).max().unwrap_or(0);
-                        let picked: Vec<(usize, Vec<String>, Vec<u8>)> =
-                            s.mb(&src).messages.iter().enumerate().filter(|(_, m)| in_set(&set, m.uid, max)).map(|(i, m)| (i, m.flags.clone(), m.raw.clone())).collect();
+                        let picked: Vec<(usize, Vec<String>, Vec<u8>)> = s
+                            .mb(&src)
+                            .messages
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, m)| in_set(&set, m.uid, max))
+                            .map(|(i, m)| (i, m.flags.clone(), m.raw.clone()))
+                            .collect();
                         for (_, flags, raw) in &picked {
                             let fl: Vec<&str> = flags.iter().map(|s| s.as_str()).collect();
                             s.add(&dest, raw.clone(), &fl);
@@ -646,7 +691,10 @@ mod fake_smtp {
                 st.lock().auths += 1;
                 w.write_all(b"235 ok\r\n")?;
             } else if upper.starts_with("MAIL FROM:") {
-                cur = Delivery { from: line[10..].trim().trim_matches(['<', '>']).split_whitespace().next().unwrap_or("").trim_matches(['<', '>']).to_string(), ..Default::default() };
+                cur = Delivery {
+                    from: line[10..].trim().trim_matches(['<', '>']).split_whitespace().next().unwrap_or("").trim_matches(['<', '>']).to_string(),
+                    ..Default::default()
+                };
                 w.write_all(b"250 ok\r\n")?;
             } else if upper.starts_with("RCPT TO:") {
                 let a = line[8..].trim().trim_matches(['<', '>']).to_string();
@@ -1032,7 +1080,9 @@ fn smtp_send_flush_and_failures() {
     };
     let ob = ops::queue_outgoing(&h.store, &message, None).unwrap();
     h.engine.send(Command::Send { outbox_id: ob, message: Box::new(message.clone()) });
-    let Event::SendSucceeded { sent_id, .. } = h.wait_event(15, |e| matches!(e, Event::SendSucceeded { outbox_id, .. } if *outbox_id == ob)) else { unreachable!() };
+    let Event::SendSucceeded { sent_id, .. } = h.wait_event(15, |e| matches!(e, Event::SendSucceeded { outbox_id, .. } if *outbox_id == ob)) else {
+        unreachable!()
+    };
     {
         let s = st.lock();
         let d = &s.deliveries[0];
@@ -1048,7 +1098,8 @@ fn smtp_send_flush_and_failures() {
     h.wait_seen(5, |e| matches!(e, Event::Activity(a) if a.title.contains("Greetings") && a.state == purpamail::net::ActivityState::Done));
 
     // FlushOutbox reconstructs queued messages from their source.
-    let queued = OutgoingMessage { message_id: "out2@example.com".into(), subject: "Queued".into(), bcc: vec![Address::new("", "bcc2@example.com")], ..message.clone() };
+    let queued =
+        OutgoingMessage { message_id: "out2@example.com".into(), subject: "Queued".into(), bcc: vec![Address::new("", "bcc2@example.com")], ..message.clone() };
     let ob2 = ops::queue_outgoing(&h.store, &queued, None).unwrap();
     h.engine.send(Command::FlushOutbox);
     h.wait_event(15, |e| matches!(e, Event::SendSucceeded { outbox_id, .. } if *outbox_id == ob2));
@@ -1067,7 +1118,13 @@ fn smtp_send_flush_and_failures() {
     assert!(h.store.message(ob3).is_some());
 
     // Rejected recipient: SendFailed and the message stays in the Outbox.
-    let bad = OutgoingMessage { message_id: "out4@example.com".into(), subject: "Bad".into(), to: vec![Address::new("", "reject@example.com")], bcc: vec![], ..message };
+    let bad = OutgoingMessage {
+        message_id: "out4@example.com".into(),
+        subject: "Bad".into(),
+        to: vec![Address::new("", "reject@example.com")],
+        bcc: vec![],
+        ..message
+    };
     let ob4 = ops::queue_outgoing(&h.store, &bad, None).unwrap();
     h.engine.send(Command::Send { outbox_id: ob4, message: Box::new(bad) });
     let Event::SendFailed { error, .. } = h.wait_event(15, |e| matches!(e, Event::SendFailed { outbox_id, .. } if *outbox_id == ob4)) else { unreachable!() };
@@ -1103,4 +1160,21 @@ fn doctor_and_account_test() {
     let bad = AccountConfig { incoming: server(1), ..acct };
     let r = purpamail::net::doctor::diagnose(&bad, &Secrets::default());
     assert!(matches!(r.incoming, ServiceStatus::Failed(_)));
+}
+
+#[test]
+fn imap_xoauth2_and_direct_client() {
+    use purpamail::net::imap_client::{ImapClient, NetError};
+    let st = imap_state();
+    let port = fake_imap::start(st.clone());
+    let cfg = ServerConfig { auth: AuthMethod::OAuth2, ..server(port) };
+    let mut c = ImapClient::connect(&cfg, true).unwrap();
+    c.login(&cfg, "secret").unwrap();
+    assert_eq!(c.select("INBOX").unwrap().exists, 3);
+    assert_eq!(c.status("Archive").unwrap().uidvalidity, 400);
+    assert!(c.transcript.take().iter().all(|l| !l.contains("secret")));
+    c.logout();
+
+    let mut c = ImapClient::connect(&cfg, false).unwrap();
+    assert!(matches!(c.login(&cfg, "expired"), Err(NetError::Auth(_))));
 }

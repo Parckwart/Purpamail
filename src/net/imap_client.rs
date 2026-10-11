@@ -259,10 +259,7 @@ pub fn open_tcp(host: &str, port: u16) -> NetResult<TcpStream> {
     if host.trim().is_empty() {
         return Err(NetError::Io(io::Error::new(io::ErrorKind::InvalidInput, "no server name configured")));
     }
-    let addrs: Vec<_> = (host, port)
-        .to_socket_addrs()
-        .map_err(|e| NetError::Io(io::Error::new(io::ErrorKind::NotFound, format!("{host}: {e}"))))?
-        .collect();
+    let addrs: Vec<_> = (host, port).to_socket_addrs().map_err(|e| NetError::Io(io::Error::new(io::ErrorKind::NotFound, format!("{host}: {e}"))))?.collect();
     let mut last = io::Error::new(io::ErrorKind::NotFound, format!("{host}: no addresses"));
     for a in addrs {
         match TcpStream::connect_timeout(&a, CONNECT_TIMEOUT) {
@@ -712,9 +709,10 @@ impl ImapClient {
 
     fn absorb_code(&mut self, code: Option<&str>) {
         if let Some(c) = code
-            && let Some(rest) = strip_prefix_ci(c, "CAPABILITY ") {
-                self.set_caps(rest);
-            }
+            && let Some(rest) = strip_prefix_ci(c, "CAPABILITY ")
+        {
+            self.set_caps(rest);
+        }
     }
 
     pub fn has_cap(&self, cap: &str) -> bool {
@@ -970,9 +968,10 @@ impl ImapClient {
         let r = self.run("LIST \"\" \"\"")?;
         for l in &r.untagged {
             if starts_with_ci(l, b"LIST ")
-                && let Ok(vals) = parse_values(&l[5..]) {
-                    return Ok(vals.get(1).and_then(|v| v.text()).filter(|d| !d.is_empty()));
-                }
+                && let Ok(vals) = parse_values(&l[5..])
+            {
+                return Ok(vals.get(1).and_then(|v| v.text()).filter(|d| !d.is_empty()));
+            }
         }
         Ok(None)
     }
@@ -1009,9 +1008,10 @@ impl ImapClient {
             }
         }
         if let Some(c) = &r.code
-            && c.eq_ignore_ascii_case("READ-ONLY") {
-                info.read_only = true;
-            }
+            && c.eq_ignore_ascii_case("READ-ONLY")
+        {
+            info.read_only = true;
+        }
         self.selected = Some(path.to_string());
         Ok(info)
     }
@@ -1159,7 +1159,11 @@ impl ImapClient {
 
     /// Upload a message. Returns `(uidvalidity, uid)` when the server supports UIDPLUS.
     pub fn append(&mut self, path: &str, flags: &[String], date: Option<i64>, data: &[u8]) -> NetResult<Option<(u32, u32)>> {
-        let mut head = format!("APPEND {} ({})", quote(&encode_mailbox(path)), flags.iter().filter(|f| !f.eq_ignore_ascii_case("\\Recent")).cloned().collect::<Vec<_>>().join(" "));
+        let mut head = format!(
+            "APPEND {} ({})",
+            quote(&encode_mailbox(path)),
+            flags.iter().filter(|f| !f.eq_ignore_ascii_case("\\Recent")).cloned().collect::<Vec<_>>().join(" ")
+        );
         if let Some(d) = date.and_then(|d| chrono::DateTime::<chrono::Utc>::from_timestamp(d, 0)) {
             head.push_str(&format!(" \"{}\"", d.format("%d-%b-%Y %H:%M:%S +0000")));
         }
@@ -1215,9 +1219,11 @@ impl ImapClient {
                     }
                     let mut w = s.split_whitespace();
                     if let (Some(n), Some(kw)) = (w.next(), w.next())
-                        && n.parse::<u32>().is_ok() && matches!(kw, "EXISTS" | "EXPUNGE" | "FETCH" | "RECENT") {
-                            break Ok(IdleEvent::Changed);
-                        }
+                        && n.parse::<u32>().is_ok()
+                        && matches!(kw, "EXISTS" | "EXPUNGE" | "FETCH" | "RECENT")
+                    {
+                        break Ok(IdleEvent::Changed);
+                    }
                     // "* OK Still here" and friends.
                 }
                 Err(e) if e.is_timeout() => break Ok(IdleEvent::Timeout),
@@ -1305,9 +1311,10 @@ pub fn parse_fetch(line: &[u8]) -> Option<FetchItem> {
         let Some(val) = pair.get(1) else { continue };
         let mut key = key.to_ascii_uppercase();
         if key.ends_with('>')
-            && let Some(p) = key.rfind('<') {
-                key.truncate(p);
-            }
+            && let Some(p) = key.rfind('<')
+        {
+            key.truncate(p);
+        }
         match key.as_str() {
             "UID" => f.uid = val.number().unwrap_or(0).min(u32::MAX as u64) as u32,
             "FLAGS" => f.flags = Some(val.list().map(|l| l.iter().filter_map(|v| v.text()).collect()).unwrap_or_default()),

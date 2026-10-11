@@ -348,7 +348,13 @@ pub struct DownloadResult {
 
 /// Download new messages into `inbox` and apply the removal policy.
 /// `progress(done, total)` is called while downloading. The caller sends QUIT.
-pub fn download(c: &mut Pop3Client, store: &Store, acct: &AccountConfig, inbox: MailboxId, progress: &mut dyn FnMut(usize, usize)) -> NetResult<DownloadResult> {
+pub fn download(
+    c: &mut Pop3Client,
+    store: &Store,
+    acct: &AccountConfig,
+    inbox: MailboxId,
+    progress: &mut dyn FnMut(usize, usize),
+) -> NetResult<DownloadResult> {
     let loaded = SeenUidls::load(store, &acct.id);
     let initial = loaded.is_none();
     let mut seen = loaded.unwrap_or_default();
@@ -390,10 +396,11 @@ pub fn download(c: &mut Pop3Client, store: &Store, acct: &AccountConfig, inbox: 
     for (uidl, entry) in &seen.entries {
         let in_inbox = entry.local_id.and_then(|id| store.message(id)).map(|m| m.mailbox_id == inbox).unwrap_or(false);
         if should_remove(acct.pop3_remove, entry, now, in_inbox)
-            && let Some(n) = numbers.get(uidl.as_str()) {
-                c.dele(*n)?;
-                result.removed += 1;
-            }
+            && let Some(n) = numbers.get(uidl.as_str())
+        {
+            c.dele(*n)?;
+            result.removed += 1;
+        }
     }
     seen.save(store, &acct.id);
     Ok(result)
@@ -433,8 +440,8 @@ fn store_message(store: &Store, acct: &AccountConfig, inbox: MailboxId, raw: &[u
 /// MD5 digest as lowercase hex (RFC 1321). Only used for APOP.
 pub fn md5_hex(data: &[u8]) -> String {
     const S: [u32; 64] = [
-        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16,
-        23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4,
+        11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
     ];
     let k: Vec<u32> = (0..64).map(|i| ((i as f64 + 1.0).sin().abs() * 4294967296.0) as u32).collect();
     let mut a0: u32 = 0x67452301;

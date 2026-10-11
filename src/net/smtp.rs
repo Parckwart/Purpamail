@@ -37,11 +37,7 @@ impl SendError {
 
 /// User name for the SMTP server (falls back to the incoming user name when shared credentials are used).
 pub fn smtp_username(acct: &AccountConfig) -> String {
-    if acct.outgoing.username.is_empty() {
-        acct.incoming.username.clone()
-    } else {
-        acct.outgoing.username.clone()
-    }
+    if acct.outgoing.username.is_empty() { acct.incoming.username.clone() } else { acct.outgoing.username.clone() }
 }
 
 /// Build a lettre transport for an SMTP server.
