@@ -166,6 +166,14 @@ CREATE INDEX IF NOT EXISTS idx_msg_uid ON messages(mailbox_id, uid);
 CREATE INDEX IF NOT EXISTS idx_msg_msgid ON messages(message_id);
 CREATE INDEX IF NOT EXISTS idx_msg_thread ON messages(thread_id);
 CREATE INDEX IF NOT EXISTS idx_msg_from ON messages(from_addr);
+CREATE INDEX IF NOT EXISTS idx_msg_irt ON messages(in_reply_to);
+CREATE INDEX IF NOT EXISTS idx_msg_subject ON messages(account_id, norm_subject);
+CREATE TABLE IF NOT EXISTS msg_refs (
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    ref TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_refs_ref ON msg_refs(ref);
+CREATE INDEX IF NOT EXISTS idx_refs_msg ON msg_refs(message_id);
 CREATE TABLE IF NOT EXISTS bodies (
     message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
     raw BLOB NOT NULL
@@ -484,13 +492,21 @@ impl Store {
         let id = tx.last_insert_rowid();
         let thread = Self::compute_thread(&tx, id, m)?;
         tx.execute("UPDATE messages SET thread_id=?2 WHERE id=?1", params![id, thread])?;
+        for r in m.references.iter().filter(|r| !r.is_empty()) {
+            tx.execute("INSERT INTO msg_refs (message_id, ref) VALUES (?1, ?2)", params![id, r])?;
+        }
         // Adopt children that arrived before this message.
         if !m.message_id.is_empty() {
-            let pattern = format!("%\"{}\"%", m.message_id.replace('%', ""));
-            tx.execute(
-                "UPDATE messages SET thread_id=?1 WHERE thread_id IN (SELECT thread_id FROM messages WHERE (in_reply_to=?2 OR refs LIKE ?3) AND id<>?4 AND account_id=?5)",
-                params![thread, m.message_id, pattern, id, m.account_id],
-            )?;
+            let orphans: Vec<i64> = {
+                let mut st = tx.prepare_cached(
+                    "SELECT thread_id FROM messages WHERE in_reply_to=?1 AND id<>?2 AND +account_id=?3
+                     UNION SELECT m.thread_id FROM msg_refs r JOIN messages m ON m.id=r.message_id WHERE r.ref=?1 AND m.id<>?2 AND +m.account_id=?3",
+                )?;
+                st.query_map(params![m.message_id, id, m.account_id], |r| r.get(0))?.filter_map(|r| r.ok()).collect()
+            };
+            for t in orphans.into_iter().filter(|t| *t != thread) {
+                tx.execute("UPDATE messages SET thread_id=?1 WHERE thread_id=?2", params![thread, t])?;
+            }
         }
         if let Some(raw) = raw {
             tx.execute("INSERT OR REPLACE INTO bodies (message_id, raw) VALUES (?1, ?2)", params![id, raw])?;

@@ -370,7 +370,7 @@ impl PurpamailApp {
                 }
             }
         }
-        c.reminders = self.store.list_messages(&MessageQuery::default()).iter().filter(|m| m.remind_at.is_some()).count() as u32;
+        c.reminders = self.store.with_conn(|c| c.query_row("SELECT COUNT(*) FROM messages WHERE remind_at IS NOT NULL AND (flags & 8)=0", [], |r| r.get::<_, i64>(0)).unwrap_or(0)) as u32;
         c.outbox = self.mailboxes.iter().filter(|m| m.role == MailboxRole::Outbox).map(|m| m.total).sum();
         c
     }
@@ -430,7 +430,16 @@ impl PurpamailApp {
                 SidebarSel::Search => {
                     q.mailboxes = vec![-1];
                 }
-                SidebarSel::Reminders => q.reminders_due = false,
+                SidebarSel::Reminders => {
+                    let ids: Vec<MessageId> = self.store.with_conn(|c| {
+                        let mut st = c.prepare("SELECT id FROM messages WHERE remind_at IS NOT NULL").unwrap();
+                        st.query_map([], |r| r.get(0)).map(|it| it.filter_map(|r| r.ok()).collect()).unwrap_or_default()
+                    });
+                    q.mailboxes = self.store.messages_by_ids(&ids).iter().map(|m| m.mailbox_id).collect();
+                    if q.mailboxes.is_empty() {
+                        q.mailboxes = vec![-1];
+                    }
+                }
                 SidebarSel::FollowUp => {
                     q.mailboxes = self.mailboxes.iter().filter(|m| m.role == MailboxRole::Sent).map(|m| m.id).collect();
                     if q.mailboxes.is_empty() {
