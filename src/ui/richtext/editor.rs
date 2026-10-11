@@ -23,6 +23,13 @@ static SPELL: Lazy<Mutex<SpellChecker>> = Lazy::new(|| {
     Mutex::new(SpellChecker::load(if lang.is_empty() || lang == "C" || lang == "POSIX" { "en_US" } else { &lang }))
 });
 
+/// Load the spell checker in the background so the first composer opens instantly.
+pub fn preload_spell() {
+    std::thread::Builder::new().name("purpamail-spell".into()).spawn(|| {
+        Lazy::force(&SPELL);
+    }).ok();
+}
+
 /// Is a spelling dictionary available?
 pub fn spell_available() -> bool {
     SPELL.lock().is_available()

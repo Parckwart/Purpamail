@@ -233,6 +233,9 @@ impl PurpamailApp {
             last_save_state: 0.0,
             sidebar_drop_hover: None,
         };
+        if s.composing.spell_check != crate::core::config::SpellCheck::Never {
+            super::richtext::preload_spell();
+        }
         if s.accounts.is_empty() && !s.onboarded {
             app.account_setup = Some(AccountSetup::new());
         }
@@ -1079,6 +1082,20 @@ impl PurpamailApp {
                             html: p.html.clone(),
                             in_reply_to: p.in_reply_to.clone(),
                             references: p.references.clone(),
+                            priority: p.priority,
+                            message_id: p.message_id.clone(),
+                            reply_to: p.reply_to.clone(),
+                            request_receipt: p.header("Disposition-Notification-To").is_some(),
+                            attachments: p
+                                .attachments
+                                .iter()
+                                .map(|a| crate::core::compose::OutgoingAttachment {
+                                    filename: a.filename.clone(),
+                                    mime_type: a.mime_type.clone(),
+                                    data: a.data.clone(),
+                                    content_id: if a.inline { a.content_id.as_ref().map(|c| c.trim_matches(['<', '>']).to_string()) } else { None },
+                                })
+                                .collect(),
                             ..Default::default()
                         };
                         self.store.delete_messages(&[outbox_id])?;

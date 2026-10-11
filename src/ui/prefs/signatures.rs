@@ -4,13 +4,11 @@
 //! `*italic*`, `[text](url)`, `- item`). The plain text editor can later be
 //! replaced by the rich text editor (`ui::richtext::RichTextEditor`).
 
-use egui::text::LayoutJob;
-use egui::{FontFamily, FontId, RichText, Stroke, TextFormat, Ui};
+use egui::{RichText, Ui};
 use egui_phosphor::regular as ic;
 
 use super::form;
 use crate::core::config::{Settings, Signature};
-use crate::ui::fonts;
 use crate::ui::theme::Palette;
 
 #[derive(Default)]
@@ -18,104 +16,8 @@ pub struct SignaturesState {
     /// Selected account filter (None = "All Signatures").
     account: Option<String>,
     selected: Option<String>,
-}
-
-/// An inline run of signature markup.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Span {
-    pub text: String,
-    pub bold: bool,
-    pub italic: bool,
-    pub link: Option<String>,
-}
-
-/// Parse one line of markup into styled spans.
-pub fn parse_inline(line: &str) -> Vec<Span> {
-    let mut out: Vec<Span> = Vec::new();
-    let (mut bold, mut italic) = (false, false);
-    let mut cur = String::new();
-    let chars: Vec<char> = line.chars().collect();
-    let flush = |cur: &mut String, out: &mut Vec<Span>, bold: bool, italic: bool| {
-        if !cur.is_empty() {
-            out.push(Span { text: std::mem::take(cur), bold, italic, link: None });
-        }
-    };
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c == '\\' && i + 1 < chars.len() {
-            cur.push(chars[i + 1]);
-            i += 2;
-            continue;
-        }
-        if c == '*' && i + 1 < chars.len() && chars[i + 1] == '*' {
-            flush(&mut cur, &mut out, bold, italic);
-            bold = !bold;
-            i += 2;
-            continue;
-        }
-        if c == '*' {
-            flush(&mut cur, &mut out, bold, italic);
-            italic = !italic;
-            i += 1;
-            continue;
-        }
-        if c == '[' {
-            // [text](url)
-            if let Some(close) = chars[i + 1..].iter().position(|&x| x == ']').map(|p| p + i + 1)
-                && chars.get(close + 1) == Some(&'(')
-                    && let Some(end) = chars[close + 2..].iter().position(|&x| x == ')').map(|p| p + close + 2) {
-                        flush(&mut cur, &mut out, bold, italic);
-                        let text: String = chars[i + 1..close].iter().collect();
-                        let url: String = chars[close + 2..end].iter().collect();
-                        out.push(Span { text: if text.is_empty() { url.clone() } else { text }, bold, italic, link: Some(url) });
-                        i = end + 1;
-                        continue;
-                    }
-        }
-        cur.push(c);
-        i += 1;
-    }
-    flush(&mut cur, &mut out, bold, italic);
-    out
-}
-
-/// Lay out signature markup for display.
-pub fn markup_job(text: &str, size: f32, message_font: bool, pal: &Palette) -> LayoutJob {
-    let mut job = LayoutJob::default();
-    let family = |b: bool, i: bool| -> FontFamily {
-        if message_font {
-            fonts::message_styled(b, i)
-        } else {
-            match (b, i) {
-                (false, false) => FontFamily::Proportional,
-                (true, false) => fonts::bold(),
-                (false, true) => fonts::italic(),
-                (true, true) => fonts::bold_italic(),
-            }
-        }
-    };
-    for (n, raw) in text.lines().enumerate() {
-        if n > 0 {
-            job.append("\n", 0.0, TextFormat { font_id: FontId::new(size, family(false, false)), ..Default::default() });
-        }
-        let (line, bullet) = match raw.strip_prefix("- ").or_else(|| raw.strip_prefix("* ")) {
-            Some(rest) => (rest, true),
-            None => (raw, false),
-        };
-        if bullet {
-            job.append("•  ", 8.0, TextFormat { font_id: FontId::new(size, family(false, false)), color: pal.text_secondary, ..Default::default() });
-        }
-        for sp in parse_inline(line) {
-            let mut f = TextFormat { font_id: FontId::new(size, family(sp.bold, sp.italic)), color: pal.text, ..Default::default() };
-            if sp.link.is_some() {
-                f.color = pal.accent;
-                f.underline = Stroke::new(1.0, pal.accent);
-            }
-            job.append(&sp.text, 0.0, f);
-        }
-    }
-    job
+    /// Rich text editor for the selected signature: (signature id, editor, last seen version).
+    editor: Option<(String, crate::ui::richtext::RichTextEditor, u64)>,
 }
 
 pub fn show(ui: &mut Ui, st: &mut SignaturesState, s: &mut Settings) {
@@ -242,29 +144,24 @@ pub fn show(ui: &mut Ui, st: &mut SignaturesState, s: &mut Settings) {
                 return;
             };
             let accounts: Vec<(String, String)> = s.accounts.iter().map(|a| (a.id.clone(), a.display_name().to_string())).collect();
-            let msg_size = s.fonts.message_font_size;
             let g = &mut s.signatures[idx];
             egui::ScrollArea::vertical().id_salt("sig_editor").auto_shrink([false, false]).show(ui, |ui| {
                 ui.label(RichText::new("Name").size(11.5).color(pal.text_secondary));
                 form::text_field(ui, &mut g.name, ui.available_width(), "Signature name");
                 ui.add_space(6.0);
                 ui.label(RichText::new("Signature").size(11.5).color(pal.text_secondary));
-                ui.add(egui::TextEdit::multiline(&mut g.body).desired_width(f32::INFINITY).desired_rows(6).hint_text("Your signature…"));
-                form::hint(ui, "**bold**   *italic*   [link text](https://…)   - list item");
-                ui.add_space(6.0);
-                ui.label(RichText::new("Preview").size(11.5).color(pal.text_secondary));
-                egui::Frame::new().fill(pal.viewer_bg).stroke(Stroke::new(1.0, pal.separator)).corner_radius(6).inner_margin(10).show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.set_min_height(60.0);
-                    let size = if g.use_default_font { msg_size } else { 13.5 };
-                    let mut job = markup_job(&g.body, size, g.use_default_font, &pal);
-                    job.wrap.max_width = ui.available_width();
-                    if g.body.trim().is_empty() {
-                        ui.label(RichText::new("—").color(pal.text_tertiary));
-                    } else {
-                        ui.label(job);
+                if st.editor.as_ref().map(|(id, _, _)| id != &g.id).unwrap_or(true) {
+                    let ed = crate::ui::richtext::RichTextEditor::new(&g.body);
+                    let v = ed.version();
+                    st.editor = Some((g.id.clone(), ed, v));
+                }
+                if let Some((_, ed, seen)) = &mut st.editor {
+                    ed.ui_with_toolbar(ui);
+                    if ed.version() != *seen {
+                        *seen = ed.version();
+                        g.body = ed.to_markup();
                     }
-                });
+                }
                 ui.add_space(6.0);
                 ui.checkbox(&mut g.use_default_font, "Always match my default message font");
                 ui.add_space(6.0);
@@ -295,31 +192,5 @@ fn count_label(n: usize) -> String {
         0 => "No signatures".into(),
         1 => "1 signature".into(),
         n => format!("{n} signatures"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sp(text: &str, bold: bool, italic: bool, link: Option<&str>) -> Span {
-        Span { text: text.into(), bold, italic, link: link.map(|s| s.into()) }
-    }
-
-    #[test]
-    fn inline_markup() {
-        assert_eq!(parse_inline("plain"), vec![sp("plain", false, false, None)]);
-        assert_eq!(parse_inline("**Jane** Doe"), vec![sp("Jane", true, false, None), sp(" Doe", false, false, None)]);
-        assert_eq!(parse_inline("*CEO*, ACME"), vec![sp("CEO", false, true, None), sp(", ACME", false, false, None)]);
-        assert_eq!(parse_inline("Web: [acme](https://acme.test)!"), vec![sp("Web: ", false, false, None), sp("acme", false, false, Some("https://acme.test")), sp("!", false, false, None)]);
-        assert_eq!(parse_inline("a \\*b\\*"), vec![sp("a *b*", false, false, None)]);
-        assert_eq!(parse_inline("[unclosed link"), vec![sp("[unclosed link", false, false, None)]);
-    }
-
-    #[test]
-    fn job_has_bullets() {
-        let pal = Palette::light();
-        let job = markup_job("- one\n- two", 13.0, false, &pal);
-        assert!(job.text.contains("•  one\n•  two"));
     }
 }

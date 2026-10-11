@@ -42,6 +42,7 @@
 //! backslash at the start of a line prevents it from being read as a prefix.
 
 mod editor;
+pub use editor::preload_spell;
 pub mod html;
 pub mod layout;
 pub mod markup;
