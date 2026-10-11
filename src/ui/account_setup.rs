@@ -420,7 +420,7 @@ impl AccountSetup {
             let focus = std::mem::take(&mut self.focus_pending);
             let name_empty = self.form.full_name.trim().is_empty();
             F.row(ui, "Name:", |ui| {
-                let r = form::text_field(ui, &mut self.form.full_name, 260.0, "Jane Appleseed");
+                let r = form::text_field(ui, &mut self.form.full_name, 260.0, "Jane Doe");
                 if focus && name_empty {
                     r.request_focus();
                 }

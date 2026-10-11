@@ -153,7 +153,6 @@ pub fn show(ui: &mut Ui, st: &mut ViewingState, s: &mut Settings) {
         F.row(ui, "Window:", |ui| {
             ui.checkbox(&mut v.show_favorites_bar, "Show favorites bar");
             ui.checkbox(&mut v.show_sidebar, "Show mailbox sidebar");
-            ui.checkbox(&mut v.show_tab_bar, "Show tab bar");
         });
         form::section(ui);
         F.row(ui, "Conversations:", |ui| {
