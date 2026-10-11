@@ -8,6 +8,7 @@ egui = "=0.36.2"
 eframe = { version = "=0.36.1", default-features = false, features = ["default_fonts", "glow", "x11", "wayland", "persistence"] }
 egui_extras = { version = "=0.36.1", features = ["all_loaders"] }
 egui-phosphor = "0.14"
+skrifa = "=0.44.0"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 mail-parser = "0.11"

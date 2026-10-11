@@ -12,3 +12,8 @@ pub fn import(_path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
 pub fn export(_path: &Path, _messages: &[Vec<u8>]) -> anyhow::Result<()> {
     Ok(())
 }
+
+/// Find every mailbox (mbox file, `.mbox` bundle, Maildir) below a directory.
+pub fn import_mailbox_tree(_path: &Path) -> Vec<(String, Vec<Vec<u8>>)> {
+    Vec::new()
+}

@@ -3201,6 +3201,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "skrifa",
  "toml",
  "uuid",
 ]

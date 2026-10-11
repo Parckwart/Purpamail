@@ -159,9 +159,81 @@ fn default_ui_face() -> Face {
     }
 }
 
+/// Rewrite a font's character map without private-use-area code points.
+///
+/// Some text fonts (Inter, for instance) ship glyphs in the private use area,
+/// which would shadow the icon font that lives there. The font file is left as is,
+/// except that a new `cmap` table (one format 12 subtable) is appended and the
+/// table directory is pointed at it.
+pub fn strip_private_use(bytes: Vec<u8>) -> Vec<u8> {
+    use skrifa::MetadataProvider;
+    let is_pua = |c: u32| (0xE000..=0xF8FF).contains(&c) || c >= 0xF0000;
+    let mappings: Vec<(u32, u32)> = match skrifa::FontRef::new(&bytes) {
+        Ok(f) => {
+            let cm = f.charmap();
+            if !cm.mappings().any(|(c, _)| is_pua(c)) {
+                return bytes;
+            }
+            cm.mappings().filter(|(c, _)| !is_pua(*c)).map(|(c, g)| (c, g.to_u32())).collect()
+        }
+        Err(_) => return bytes,
+    };
+    // Group consecutive code points with consecutive glyph ids.
+    let mut groups: Vec<(u32, u32, u32)> = Vec::new();
+    for (c, g) in mappings {
+        match groups.last_mut() {
+            Some((start, end, sg)) if c == *end + 1 && g == *sg + (c - *start) => *end = c,
+            _ => groups.push((c, c, g)),
+        }
+    }
+    let be16 = |v: &mut Vec<u8>, x: u16| v.extend_from_slice(&x.to_be_bytes());
+    let be32 = |v: &mut Vec<u8>, x: u32| v.extend_from_slice(&x.to_be_bytes());
+    let mut cmap = Vec::new();
+    be16(&mut cmap, 0); // version
+    be16(&mut cmap, 1); // number of subtables
+    be16(&mut cmap, 3); // platform: Windows
+    be16(&mut cmap, 10); // encoding: Unicode full repertoire
+    be32(&mut cmap, 12); // offset of the subtable
+    be16(&mut cmap, 12); // format
+    be16(&mut cmap, 0);
+    be32(&mut cmap, 16 + 12 * groups.len() as u32);
+    be32(&mut cmap, 0); // language
+    be32(&mut cmap, groups.len() as u32);
+    for (s, e, g) in groups {
+        be32(&mut cmap, s);
+        be32(&mut cmap, e);
+        be32(&mut cmap, g);
+    }
+    let mut out = bytes;
+    if out.len() < 12 {
+        return out;
+    }
+    let num_tables = u16::from_be_bytes([out[4], out[5]]) as usize;
+    while out.len() % 4 != 0 {
+        out.push(0);
+    }
+    let new_offset = out.len() as u32;
+    for i in 0..num_tables {
+        let rec = 12 + i * 16;
+        if rec + 16 > out.len() {
+            break;
+        }
+        if &out[rec..rec + 4] == b"cmap" {
+            out[rec + 8..rec + 12].copy_from_slice(&new_offset.to_be_bytes());
+            out[rec + 12..rec + 16].copy_from_slice(&(cmap.len() as u32).to_be_bytes());
+            out.extend_from_slice(&cmap);
+            while out.len() % 4 != 0 {
+                out.push(0);
+            }
+            break;
+        }
+    }
+    out
+}
+
 fn load(defs: &mut FontDefinitions, key: &str, path: &Option<PathBuf>) -> Option<String> {
     let p = path.as_ref()?;
-    let bytes = std::fs::read(p).ok()?;
+    let bytes = strip_private_use(std::fs::read(p).ok()?);
     let name = format!("{key}:{}", p.display());
     if !defs.font_data.contains_key(&name) {
         defs.font_data.insert(name.clone(), Arc::new(FontData::from_owned(bytes)));
@@ -281,4 +353,23 @@ pub fn system_families() -> Vec<String> {
     v.sort();
     v.dedup();
     v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_private_use_glyphs() {
+        let Some(path) = fc_match("Inter") else { return };
+        let bytes = std::fs::read(path).unwrap();
+        let out = strip_private_use(bytes.clone());
+        use skrifa::MetadataProvider;
+        let f = skrifa::FontRef::new(&out).unwrap();
+        let cm = f.charmap();
+        assert!(cm.map('a').is_some());
+        assert!(cm.mappings().all(|(c, _)| !(0xE000..=0xF8FF).contains(&c)));
+        let orig = skrifa::FontRef::new(&bytes).unwrap();
+        assert_eq!(orig.charmap().map('g'), cm.map('g'));
+    }
 }

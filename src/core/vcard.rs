@@ -10,3 +10,7 @@ pub fn parse(_s: &str) -> Vec<Contact> {
 pub fn to_vcard(_c: &Contact) -> String {
     String::new()
 }
+
+pub fn export_all(contacts: &[Contact]) -> String {
+    contacts.iter().map(to_vcard).collect()
+}
