@@ -3181,6 +3181,7 @@ dependencies = [
  "crossbeam-channel",
  "directories",
  "eframe",
+ "egui",
  "egui-phosphor",
  "egui_extras",
  "env_logger",
