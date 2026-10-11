@@ -108,8 +108,11 @@ impl Engine {
     }
 }
 
+/// Spawn a named thread. Names may come from user input (account names), so NUL
+/// bytes — which would make thread creation panic — are removed.
 fn spawn_named(name: &str, f: impl FnOnce() + Send + 'static) {
-    if let Err(e) = std::thread::Builder::new().name(name.to_string()).spawn(f) {
+    let name: String = name.chars().filter(|c| *c != '\0').take(48).collect();
+    if let Err(e) = std::thread::Builder::new().name(name.clone()).spawn(f) {
         log::error!("could not start thread {name}: {e}");
     }
 }
@@ -1381,9 +1384,18 @@ impl<'a> ImapSync<'a> {
             })?;
         }
         if let Some((validity, uid)) = result
-            && validity != 0 && validity == mb.uidvalidity && store.message_by_uid(target, uid).is_none() {
+            && validity != 0
+            && store.message_by_uid(target, uid).is_none()
+        {
+            if mb.uidvalidity == 0 {
+                // Never synchronized: remember the UIDVALIDITY the UID belongs to, so a
+                // later change is detected; uidnext stays 0 so the first sync is complete.
+                let _ = store.set_mailbox_sync_state(target, validity, mb.uidnext);
+            }
+            if mb.uidvalidity == 0 || mb.uidvalidity == validity {
                 let _ = store.set_uid(message, uid);
             }
+        }
         self.touched.insert(target);
         Ok(())
     }

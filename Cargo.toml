@@ -13,7 +13,6 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 mail-parser = "0.11"
 mail-builder = "1.0"
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "native-tls", "builder", "hostname"] }
-imap = "2.4"
 native-tls = "0.2"
 notify-rust = "4"
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal", "pollster"] }
